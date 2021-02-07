@@ -1,0 +1,9 @@
+displayName: JWT Required Field
+type: middleware
+
+import: github.com/team-carepay/traefik-jwt-plugin
+
+summary: Traefik middleware plugin which verifies whether the JWT token has a specific required field
+
+testData:
+  RequiredField: exp

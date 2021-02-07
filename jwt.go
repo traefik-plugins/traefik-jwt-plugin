@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/traefik/traefik/v2/pkg/log"
 )
 
 // Config the plugin configuration.
@@ -26,7 +24,6 @@ func CreateConfig() *Config {
 type Jwt struct {
 	next          http.Handler
 	requiredField string
-	log           *log.Logger
 }
 
 // LogEvent contains a single log entry

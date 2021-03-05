@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -45,6 +47,7 @@ type JwtPlugin struct {
 	opaAllowField string
 	payloadFields []string
 	required      bool
+	jwkEndpoints  []*url.URL
 	keys          map[string]interface{}
 	alg           string
 	iss           string
@@ -97,6 +100,7 @@ type Key struct {
 	Dp  string   `json:"dp,omitempty"`
 	Dq  string   `json:"dq,omitempty"`
 	Qi  string   `json:"qi,omitempty"`
+	Crv string   `json:"crv,omitempty"`
 }
 
 // Keys represents a set of JSON web keys.
@@ -128,98 +132,145 @@ type Response struct {
 
 // New creates a new plugin
 func New(_ context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
-	keys, err := getKeyFromCertOrJWK(config.Keys)
-	if err != nil {
-		return nil, err
-	}
-	return &JwtPlugin{
+	jwtPlugin := &JwtPlugin{
 		next:          next,
 		opaUrl:        config.OpaUrl,
 		opaAllowField: config.OpaAllowField,
 		payloadFields: config.PayloadFields,
 		required:      config.Required,
-		keys:          keys,
 		alg:           config.Alg,
 		iss:           config.Iss,
 		aud:           config.Aud,
-	}, nil
+		keys:          make(map[string]interface{}),
+	}
+	if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
+		return nil, err
+	}
+	if err := jwtPlugin.RefreshKeys(); err != nil {
+		return nil, err
+	}
+	return jwtPlugin, nil
 }
 
-func getKeyFromCertOrJWK(certificates []string) (map[string]interface{}, error) {
-	var keys = make(map[string]interface{})
+func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 	for _, certificate := range certificates {
 		if block, rest := pem.Decode([]byte(certificate)); block != nil {
 			if len(rest) > 0 {
-				return nil, fmt.Errorf("extra data after a PEM certificate block")
+				return fmt.Errorf("extra data after a PEM certificate block")
 			}
 			if block.Type == "CERTIFICATE" {
 				cert, err := x509.ParseCertificate(block.Bytes)
 				if err != nil {
-					return nil, fmt.Errorf("failed to parse a PEM certificate: %v", err)
+					return fmt.Errorf("failed to parse a PEM certificate: %v", err)
 				}
-				keys[base64.RawURLEncoding.EncodeToString(cert.SubjectKeyId)] = cert.PublicKey
+				jwtPlugin.keys[base64.RawURLEncoding.EncodeToString(cert.SubjectKeyId)] = cert.PublicKey
 			} else if block.Type == "PUBLIC KEY" || block.Type == "RSA PUBLIC KEY" {
 				key, err := x509.ParsePKIXPublicKey(block.Bytes)
 				if err != nil {
-					return nil, fmt.Errorf("failed to parse a PEM public key: %v", err)
+					return fmt.Errorf("failed to parse a PEM public key: %v", err)
 				}
-				keys[strconv.Itoa(len(keys))] = key
+				jwtPlugin.keys[strconv.Itoa(len(jwtPlugin.keys))] = key
 			} else {
-				return nil, fmt.Errorf("failed to extract a Key from the PEM certificate")
+				return fmt.Errorf("failed to extract a Key from the PEM certificate")
 			}
 		} else {
 			if u, err := url.ParseRequestURI(certificate); err == nil {
-				response, err := http.Get(u.String())
-				if err == nil {
-					body, err := ioutil.ReadAll(response.Body)
-					if err == nil {
-						var jwksKeys Keys
-						err := json.Unmarshal(body, &jwksKeys)
-						if err == nil {
-							for _, key := range jwksKeys.Keys {
-								switch key.Kty {
-								case "RSA":
-									{
-										nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
-										if err != nil {
-											return nil, err
-										}
-										eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
-										if err != nil {
-											return nil, err
-										}
-										keys[key.Kid] = rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: int(new(big.Int).SetBytes(eBytes).Uint64())}
-									}
-								case "EC":
-									{
-										xBytes, err := base64.RawURLEncoding.DecodeString(key.X)
-										if err != nil {
-											return nil, err
-										}
-										yBytes, err := base64.RawURLEncoding.DecodeString(key.Y)
-										if err != nil {
-											return nil, err
-										}
-										keys[key.Kid] = ecdsa.PublicKey{X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
-									}
-								case "oct":
-									{
-										kBytes, err := base64.RawURLEncoding.DecodeString(key.K)
-										if err != nil {
-											return nil, err
-										}
-										keys[key.Kid] = kBytes
-									}
-								}
-							}
-						}
-					}
-				}
+				jwtPlugin.jwkEndpoints = append(jwtPlugin.jwkEndpoints, u)
 			}
 		}
 	}
 
-	return keys, nil
+	return nil
+}
+
+func (jwtPlugin *JwtPlugin) RefreshKeys() error {
+	for _, u := range jwtPlugin.jwkEndpoints {
+		response, err := http.Get(u.String())
+		if err != nil {
+			// TODO: log warning
+			continue
+		}
+		body, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			// TODO: log warning
+			continue
+		}
+		var jwksKeys Keys
+		err = json.Unmarshal(body, &jwksKeys)
+		if err != nil {
+			// TODO: log warning
+			continue
+		}
+		for _, key := range jwksKeys.Keys {
+			switch key.Kty {
+			case "RSA":
+				{
+					if key.Kid == "" {
+						key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"e":"%s","kty":"RSA","n":"%s"}`, key.E, key.N))
+						if err != nil {
+							return err
+						}
+					}
+					nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
+					if err != nil {
+						return err
+					}
+					eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
+					if err != nil {
+						return err
+					}
+					jwtPlugin.keys[key.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: int(new(big.Int).SetBytes(eBytes).Uint64())}
+				}
+			case "EC":
+				{
+					if key.Kid == "" {
+						key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"crv":"P-256","kty":"EC","x":"%s","y":"%s"}`, key.X, key.Y))
+						if err != nil {
+							return err
+						}
+					}
+					var crv elliptic.Curve
+					switch key.Crv {
+					case "P-256":
+						crv = elliptic.P256()
+					case "P-384":
+						crv = elliptic.P384()
+					case "P-521":
+						crv = elliptic.P521()
+					default:
+						switch key.Alg {
+						case "ES256":
+							crv = elliptic.P256()
+						case "ES384":
+							crv = elliptic.P384()
+						case "ES512":
+							crv = elliptic.P521()
+						default:
+							return fmt.Errorf("algorithm not supported")
+						}
+					}
+					xBytes, err := base64.RawURLEncoding.DecodeString(key.X)
+					if err != nil {
+						return err
+					}
+					yBytes, err := base64.RawURLEncoding.DecodeString(key.Y)
+					if err != nil {
+						return err
+					}
+					jwtPlugin.keys[key.Kid] = &ecdsa.PublicKey{Curve: crv, X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
+				}
+			case "oct":
+				{
+					kBytes, err := base64.RawURLEncoding.DecodeString(key.K)
+					if err != nil {
+						return err
+					}
+					jwtPlugin.keys[key.Kid] = kBytes
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Request) {
@@ -341,9 +392,9 @@ func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JSONWebToken) error {
 
 func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JSONWebToken) error {
 	opaPayload := toOPAPayload(request)
-	if (token != nil) {
-		opaPayload.Input.JWTHeader =  token.Header
-		opaPayload.Input.JWTPayload= token.Payload
+	if token != nil {
+		opaPayload.Input.JWTHeader = token.Header
+		opaPayload.Input.JWTPayload = token.Payload
 	}
 	authPayloadAsJSON, err := json.Marshal(opaPayload)
 	if err != nil {
@@ -469,4 +520,11 @@ func verifyECDSA(key interface{}, _ crypto.Hash, digest []byte, signature []byte
 		return nil
 	}
 	return fmt.Errorf("token verification failed (ECDSA)")
+}
+
+// JWKThumbprint creates a JWK thumbprint out of pub
+// as specified in https://tools.ietf.org/html/rfc7638.
+func JWKThumbprint(jwk string) (string, error) {
+	b := sha256.Sum256([]byte(jwk))
+	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }

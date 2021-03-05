@@ -1,9 +1,11 @@
-displayName: JWT Required Field
+displayName: JWT Access Policy
 type: middleware
 
 import: github.com/team-carepay/traefik-jwt-plugin
 
-summary: Traefik middleware plugin which verifies whether the JWT token has a specific required field
+summary: Verifies JWT token. Supports RSA/DSA/HMAC. Support fetching keys from JWKS endpoint. Supports Open Policy Agent (OPA) for validating the request.
+
+iconPath: jwt.png
 
 testData:
   OpaUrl: http://localhost:8181/v1/data/example

@@ -4,9 +4,10 @@ Supports RSA, ECDSA and symmetric keys. Supports Open Policy Agent (OPA) for add
 
 Features:
 * RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384, ES512, HS256, HS384, HS512
-* Certificates, Public Key or JWKS endpoint
+* Certificates or public keys can be configured in the dynamic config 
+* Supports JWK endpoints for fetching keys remotely
 * Reject a request or Log warning when required field is missing from JWT payload
-* Open Policy Agent
+* Validate request with Open Policy Agent
 * Adds the verified and decoded token to the OPA input
 
 ## Installation
@@ -88,6 +89,81 @@ metadata:
 
 ```
 
+# Open Policy Agent
+The following section describes how to use this plugin with Open Policy Agent (OPA)
+
+## OPA input payload
+The plugin will translate the HTTP request (including headers and parameters) and forwards the payload as JSON to OPA. For example, the following URL: `http://localhost/api/path?param1=foo&param2=bar` will result in the following payload (headers are reduced for readability):
+
+```
+{
+    "headers": {
+      "Accept-Encoding": [
+        "gzip, deflate, br"
+      ],
+      "X-Forwarded-Host": [
+        "localhost"
+      ],
+      "X-Forwarded-Port": [
+        "80"
+      ],
+      "X-Forwarded-Proto": [
+        "http"
+      ],
+      "X-Forwarded-Server": [
+        "traefik-84c77c5547-sm2cb"
+      ],
+      "X-Real-Ip": [
+        "172.18.0.1"
+      ]
+    },
+    "host": "localhost",
+    "method": "GET",
+    "parameters": {
+      "param1": [
+        "foo"
+      ],
+      "param2": [
+        "bar"
+      ]
+    },
+    "path": [
+      "api",
+      "path"
+    ]
+  }
+```
+
+## Example OPA policy in Rego
+The policies you enforce can be as complex or simple as you prefer. For example, the policy could decode the JWT token and verify the token is valid and has not expired, and that the user has the required claims in the token.
+
+The policy below shows an simplified example:
+```
+package example
+
+default allow = false
+
+allow {
+	input.method = "GET"
+	input.path[0] = "public"
+}
+
+allow {
+	input.method = "GET"
+	input.path = [ "secure", i ]
+  has_token([ "123", "456"])
+}
+
+has_token(tokens) {
+    input.path[1] = tokens[i]
+}
+```
+In the above example, requesting `/public/anything` or `/secure/123` is allowed, however requesting `/secure/xxx` would be rejected and results in a 403 Forbidden.
+
+TODO:
+* Inject JWT fields in HTTP headers
+* Inject OPA response in HTTP headers
+* Refresh keys from JWK endpoint in background
 
 ## License
 This software is released under the Apache 2.0 License

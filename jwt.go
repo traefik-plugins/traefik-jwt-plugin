@@ -33,6 +33,8 @@ type Config struct {
 	Alg           string
 	Iss           string
 	Aud           string
+	OpaHeaders    map[string]string
+	JwtHeaders    map[string]string
 }
 
 // CreateConfig creates a new OPA Config
@@ -52,6 +54,8 @@ type JwtPlugin struct {
 	alg           string
 	iss           string
 	aud           string
+	opaHeaders    map[string]string
+	jwtHeaders    map[string]string
 }
 
 // LogEvent contains a single log entry
@@ -64,7 +68,7 @@ type LogEvent struct {
 	Sub        string    `json:"sub"`
 }
 
-type JWTHeader struct {
+type JwtHeader struct {
 	Alg  string   `json:"alg"`
 	Kid  string   `json:"kid"`
 	Typ  string   `json:"typ"`
@@ -72,10 +76,10 @@ type JWTHeader struct {
 	Crit []string `json:"crit"`
 }
 
-type JSONWebToken struct {
+type JWT struct {
 	Plaintext []byte
 	Signature []byte
-	Header    JWTHeader
+	Header    JwtHeader
 	Payload   map[string]interface{}
 }
 
@@ -116,7 +120,7 @@ type PayloadInput struct {
 	Path       []string               `json:"path"`
 	Parameters url.Values             `json:"parameters"`
 	Headers    map[string][]string    `json:"headers"`
-	JWTHeader  JWTHeader              `json:"tokenHeader"`
+	JWTHeader  JwtHeader              `json:"tokenHeader"`
 	JWTPayload map[string]interface{} `json:"tokenPayload"`
 }
 
@@ -142,13 +146,13 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 		iss:           config.Iss,
 		aud:           config.Aud,
 		keys:          make(map[string]interface{}),
+		jwtHeaders:    config.JwtHeaders,
+		opaHeaders:    config.OpaHeaders,
 	}
 	if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
 		return nil, err
 	}
-	if err := jwtPlugin.RefreshKeys(); err != nil {
-		return nil, err
-	}
+	go jwtPlugin.RefreshKeys()
 	return jwtPlugin, nil
 }
 
@@ -173,104 +177,106 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 			} else {
 				return fmt.Errorf("failed to extract a Key from the PEM certificate")
 			}
+		} else if u, err := url.ParseRequestURI(certificate); err == nil {
+			jwtPlugin.jwkEndpoints = append(jwtPlugin.jwkEndpoints, u)
 		} else {
-			if u, err := url.ParseRequestURI(certificate); err == nil {
-				jwtPlugin.jwkEndpoints = append(jwtPlugin.jwkEndpoints, u)
-			}
+			return fmt.Errorf("Invalid configuration, expecting a certificate, public key or JWK URL")
 		}
 	}
 
 	return nil
 }
 
-func (jwtPlugin *JwtPlugin) RefreshKeys() error {
-	for _, u := range jwtPlugin.jwkEndpoints {
-		response, err := http.Get(u.String())
-		if err != nil {
-			// TODO: log warning
-			continue
-		}
-		body, err := ioutil.ReadAll(response.Body)
-		if err != nil {
-			// TODO: log warning
-			continue
-		}
-		var jwksKeys Keys
-		err = json.Unmarshal(body, &jwksKeys)
-		if err != nil {
-			// TODO: log warning
-			continue
-		}
-		for _, key := range jwksKeys.Keys {
-			switch key.Kty {
-			case "RSA":
-				{
-					if key.Kid == "" {
-						key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"e":"%s","kty":"RSA","n":"%s"}`, key.E, key.N))
-						if err != nil {
-							return err
+func (jwtPlugin *JwtPlugin) RefreshKeys() {
+	for {
+		for _, u := range jwtPlugin.jwkEndpoints {
+			response, err := http.Get(u.String())
+			if err != nil {
+				// TODO: log warning
+				continue
+			}
+			body, err := ioutil.ReadAll(response.Body)
+			if err != nil {
+				// TODO: log warning
+				continue
+			}
+			var jwksKeys Keys
+			err = json.Unmarshal(body, &jwksKeys)
+			if err != nil {
+				// TODO: log warning
+				continue
+			}
+			for _, key := range jwksKeys.Keys {
+				switch key.Kty {
+				case "RSA":
+					{
+						if key.Kid == "" {
+							key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"e":"%s","kty":"RSA","n":"%s"}`, key.E, key.N))
+							if err != nil {
+								break
+							}
 						}
-					}
-					nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
-					if err != nil {
-						return err
-					}
-					eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
-					if err != nil {
-						return err
-					}
-					jwtPlugin.keys[key.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: int(new(big.Int).SetBytes(eBytes).Uint64())}
-				}
-			case "EC":
-				{
-					if key.Kid == "" {
-						key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"crv":"P-256","kty":"EC","x":"%s","y":"%s"}`, key.X, key.Y))
+						nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
 						if err != nil {
-							return err
+							break
 						}
+						eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
+						if err != nil {
+							break
+						}
+						jwtPlugin.keys[key.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: int(new(big.Int).SetBytes(eBytes).Uint64())}
 					}
-					var crv elliptic.Curve
-					switch key.Crv {
-					case "P-256":
-						crv = elliptic.P256()
-					case "P-384":
-						crv = elliptic.P384()
-					case "P-521":
-						crv = elliptic.P521()
-					default:
-						switch key.Alg {
-						case "ES256":
+				case "EC":
+					{
+						if key.Kid == "" {
+							key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"crv":"P-256","kty":"EC","x":"%s","y":"%s"}`, key.X, key.Y))
+							if err != nil {
+								break
+							}
+						}
+						var crv elliptic.Curve
+						switch key.Crv {
+						case "P-256":
 							crv = elliptic.P256()
-						case "ES384":
+						case "P-384":
 							crv = elliptic.P384()
-						case "ES512":
+						case "P-521":
 							crv = elliptic.P521()
 						default:
-							return fmt.Errorf("algorithm not supported")
+							switch key.Alg {
+							case "ES256":
+								crv = elliptic.P256()
+							case "ES384":
+								crv = elliptic.P384()
+							case "ES512":
+								crv = elliptic.P521()
+							default:
+								crv = elliptic.P256()
+							}
 						}
+						xBytes, err := base64.RawURLEncoding.DecodeString(key.X)
+						if err != nil {
+							break
+						}
+						yBytes, err := base64.RawURLEncoding.DecodeString(key.Y)
+						if err != nil {
+							break
+						}
+						jwtPlugin.keys[key.Kid] = &ecdsa.PublicKey{Curve: crv, X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
 					}
-					xBytes, err := base64.RawURLEncoding.DecodeString(key.X)
-					if err != nil {
-						return err
+				case "oct":
+					{
+						kBytes, err := base64.RawURLEncoding.DecodeString(key.K)
+						if err != nil {
+							break
+						}
+						jwtPlugin.keys[key.Kid] = kBytes
 					}
-					yBytes, err := base64.RawURLEncoding.DecodeString(key.Y)
-					if err != nil {
-						return err
-					}
-					jwtPlugin.keys[key.Kid] = &ecdsa.PublicKey{Curve: crv, X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
-				}
-			case "oct":
-				{
-					kBytes, err := base64.RawURLEncoding.DecodeString(key.K)
-					if err != nil {
-						return err
-					}
-					jwtPlugin.keys[key.Kid] = kBytes
 				}
 			}
 		}
+		time.Sleep(60 * 60 * 1000) // one hour
 	}
-	return nil
 }
 
 func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Request) {
@@ -291,6 +297,12 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 		if len(jwtPlugin.keys) > 0 {
 			if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
 				return err
+			}
+			for k, v := range jwtPlugin.jwtHeaders {
+				value, ok := jwtToken.Payload[v]
+				if ok {
+					request.Header.Add(k, fmt.Sprintf("%v", value))
+				}
 			}
 		}
 		for _, fieldName := range jwtPlugin.payloadFields {
@@ -320,7 +332,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 	return nil
 }
 
-func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JSONWebToken, error) {
+func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	authHeader, ok := request.Header["Authorization"]
 	if !ok {
 		fmt.Println("No Authorization header found")
@@ -347,7 +359,7 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JSONWebToken, 
 	if err != nil {
 		return nil, err
 	}
-	jwtToken := JSONWebToken{
+	jwtToken := JWT{
 		Plaintext: []byte(auth[7 : len(parts[0])+len(parts[1])+8]),
 		Signature: signature,
 	}
@@ -362,7 +374,7 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JSONWebToken, 
 	return &jwtToken, nil
 }
 
-func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JSONWebToken) error {
+func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
 	for _, h := range jwtToken.Header.Crit {
 		if _, ok := supportedHeaderNames[h]; !ok {
 			return fmt.Errorf("unsupported header: %s", h)
@@ -390,7 +402,7 @@ func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JSONWebToken) error {
 	}
 }
 
-func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JSONWebToken) error {
+func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
 	opaPayload := toOPAPayload(request)
 	if token != nil {
 		opaPayload.Input.JWTHeader = token.Header
@@ -414,12 +426,18 @@ func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JSONWebToken)
 		return err
 	}
 	var allow bool
-	err = json.Unmarshal(result.Result[jwtPlugin.opaAllowField], &allow)
-	if err != nil {
+
+	if err = json.Unmarshal(result.Result[jwtPlugin.opaAllowField], &allow); err != nil {
 		return err
 	}
 	if allow != true {
 		return fmt.Errorf("%s", body)
+	}
+	for k, v := range jwtPlugin.opaHeaders {
+		var value string
+		if err = json.Unmarshal(result.Result[v], &value); err == nil {
+			request.Header.Add(k, value) // add OPA result as an HTTP header
+		}
 	}
 	return nil
 }

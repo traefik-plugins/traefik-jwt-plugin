@@ -24,3 +24,7 @@ testData:
       V6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9
       MwIDAQAB
       -----END PUBLIC KEY-----
+  OpaHeaders:
+    Allowed: allow
+  JwtHeaders:
+    Subject: sub

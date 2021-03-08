@@ -14,6 +14,7 @@ import (
 func TestServeHTTPOK(t *testing.T) {
 	cfg := traefik_jwt_plugin.CreateConfig()
 	cfg.PayloadFields = []string{"exp"}
+	cfg.JwtHeaders = map[string]string{"Name": "name"}
 	cfg.Keys = []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"}
 	ctx := context.Background()
 	nextCalled := false
@@ -36,6 +37,9 @@ func TestServeHTTPOK(t *testing.T) {
 
 	if nextCalled == false {
 		t.Fatal("next.ServeHTTP was not called")
+	}
+	if v := req.Header.Get("Name"); v != "John Doe" {
+		t.Fatal("Expected header Name:John Doe")
 	}
 }
 
@@ -106,12 +110,14 @@ func TestServeHTTPAllowed(t *testing.T) {
 			t.Fatal(fmt.Sprintf("Parameters incorrect, expected foo,bar but got %s", strings.Join(param1, ",")))
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintln(w, "{ \"result\": { \"allow\": true } }")
+		_, _ = fmt.Fprintln(w, `{ "result": { "allow": true, "foo": "Bar" } }`)
 	}))
 	defer ts.Close()
 	cfg := traefik_jwt_plugin.CreateConfig()
 	cfg.OpaUrl = fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL)
 	cfg.OpaAllowField = "allow"
+	cfg.OpaHeaders = map[string]string{"Foo": "foo"}
+
 	ctx := context.Background()
 	nextCalled := false
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
@@ -135,6 +141,9 @@ func TestServeHTTPAllowed(t *testing.T) {
 	}
 	if nextCalled == false {
 		t.Fatal("next.ServeHTTP was not called")
+	}
+	if req.Header.Get("Foo") != "Bar" {
+		t.Fatal("Expected Foo:Bar header")
 	}
 }
 

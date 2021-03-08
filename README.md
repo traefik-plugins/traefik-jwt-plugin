@@ -45,10 +45,12 @@ OpaUrl | URL for Open Policy Agent (e.g. http://opa:8181/v1/data/example)
 OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not
 PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`). Multiple field names may be specificied (string array)
 Required | When true, in case the JWT payload is missing a field, the request will be forbidden
-Keys | Used to validate JWT signature. Multiple keys are supported
+Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.
 Alg | Used to verify which PKI algorithm is used in the JWT
 Iss | Used to verify the issuer of the JWT
 Aud | Used to verify the audience of the JWT
+JwtHeaders | Map used to inject JWT payload fields as an HTTP header
+OpaHeaders | Map used to inject OPA result fields as an HTTP header
 
 ## Example configuration
 This example uses Kubernetes Custom Resource Descriptors (CRD) :
@@ -76,6 +78,10 @@ spec:
           V6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9
           MwIDAQAB
         -----END PUBLIC KEY-----
+      OpaHeaders:
+        Allowed: allow
+      JwtHeaders:
+        Subject: sub
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -159,11 +165,6 @@ has_token(tokens) {
 }
 ```
 In the above example, requesting `/public/anything` or `/secure/123` is allowed, however requesting `/secure/xxx` would be rejected and results in a 403 Forbidden.
-
-TODO:
-* Inject JWT fields in HTTP headers
-* Inject OPA response in HTTP headers
-* Refresh keys from JWK endpoint in background
 
 ## License
 This software is released under the Apache 2.0 License

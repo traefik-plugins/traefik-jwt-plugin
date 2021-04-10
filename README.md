@@ -25,7 +25,7 @@ experimental:
 
 additionalArguments:
 - --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin
-- --experimental.plugins.jwt.version=v0.0.1
+- --experimental.plugins.jwt.version=v0.0.5
 ```
 
 ### Installation via command line
@@ -33,11 +33,11 @@ additionalArguments:
 traefik \
   --experimental.pilot.token=xxxx-xxxx-xxx \
   --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin \
-  --experimental.plugins.jwt.version=v0.0.3
+  --experimental.plugins.jwt.version=v0.0.5
 ```
 
 ## Configuration
-The plugin currently supports the following configuration settings:
+The plugin currently supports the following configuration settings: (all fields are optional)
 
 Name | Description
 --- | ---
@@ -68,6 +68,7 @@ spec:
         - exp
       Required: true
       Keys:
+        - https://samples.auth0.com/.well-known/jwks.json
         - |
           -----BEGIN PUBLIC KEY-----
           MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv

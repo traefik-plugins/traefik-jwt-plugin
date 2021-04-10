@@ -62,7 +62,7 @@ func TestServeHTTPInvalidSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header["Authorization"] = []string{"Bearer A.B.C"}
+	req.Header["Authorization"] = []string{"Bearer AAAAAA.BBBBBB.CCCCCC"}
 
 	jwt.ServeHTTP(recorder, req)
 
@@ -180,7 +180,6 @@ func TestServeHTTPForbidden(t *testing.T) {
 
 func TestNewJWKEndpoint(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprintln(w, `{"keys":[{"alg":"RS512","e":"AQAB","n":"nzyis1ZjfNB0bBgKFMSvvkTtwlvBsaJq7S5wA-kzeVOVpVWwkWdVha4s38XM_pa_yr47av7-z3VTmvDRyAHcaT92whREFpLv9cj5lTeJSibyr_Mrm_YtjCZVWgaOYIhwrXwKLqPr_11inWsAkfIytvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0e-lf4s4OxQawWD79J9_5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWbV6L11BWkpzGXSW4Hv43qa-GSYOD2QU68Mb59oSk2OB-BtOLpJofmbGEGgvmwyCI9Mw","kty":"RSA"}]}`)
 	}))
 	defer ts.Close()
@@ -205,7 +204,7 @@ func TestNewJWKEndpoint(t *testing.T) {
 
 	opa.ServeHTTP(recorder, req)
 
-	if recorder.Code == http.StatusForbidden {
+	if recorder.Code != http.StatusOK {
 		t.Fatal("Exptected OK")
 	}
 	if nextCalled == false {

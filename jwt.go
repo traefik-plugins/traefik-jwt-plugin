@@ -152,8 +152,15 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 	if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
 		return nil, err
 	}
-	go jwtPlugin.RefreshKeys()
+	go jwtPlugin.BackgroundRefresh()
 	return jwtPlugin, nil
+}
+
+func (jwtPlugin *JwtPlugin) BackgroundRefresh() {
+	for {
+		jwtPlugin.FetchKeys()
+		time.Sleep(15 * time.Minute) // 15 min
+	}
 }
 
 func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
@@ -187,8 +194,7 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 	return nil
 }
 
-func (jwtPlugin *JwtPlugin) RefreshKeys() {
-	for {
+func (jwtPlugin *JwtPlugin) FetchKeys() {
 		for _, u := range jwtPlugin.jwkEndpoints {
 			response, err := http.Get(u.String())
 			if err != nil {
@@ -270,13 +276,17 @@ func (jwtPlugin *JwtPlugin) RefreshKeys() {
 						if err != nil {
 							break
 						}
+						if key.Kid == "" {
+							key.Kid, err = JWKThumbprint(key.K)
+							if err != nil {
+								break
+							}
+						}
 						jwtPlugin.keys[key.Kid] = kBytes
 					}
 				}
 			}
 		}
-		time.Sleep(60 * 60 * 1000) // one hour
-	}
 }
 
 func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Request) {

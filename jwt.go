@@ -311,7 +311,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 			for k, v := range jwtPlugin.jwtHeaders {
 				value, ok := jwtToken.Payload[v]
 				if ok {
-					request.Header.Add(k, fmt.Sprintf("%v", value))
+					request.Header.Add(k, value.(string))
 				}
 			}
 		}
@@ -440,7 +440,7 @@ func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
 	if err = json.Unmarshal(result.Result[jwtPlugin.opaAllowField], &allow); err != nil {
 		return err
 	}
-	if allow != true {
+	if !allow {
 		return fmt.Errorf("%s", body)
 	}
 	for k, v := range jwtPlugin.opaHeaders {

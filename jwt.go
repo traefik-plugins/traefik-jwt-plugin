@@ -60,12 +60,21 @@ type JwtPlugin struct {
 
 // LogEvent contains a single log entry
 type LogEvent struct {
-	Level      string    `json:"level"`
-	Msg        string    `json:"msg"`
-	Time       time.Time `json:"time"`
-	RemoteAddr string    `json:"remote"`
-	URL        string    `json:"url"`
-	Sub        string    `json:"sub"`
+	Level   string    `json:"level"`
+	Msg     string    `json:"msg"`
+	Time    time.Time `json:"time"`
+	Network `json:"network"`
+	URL     string `json:"url"`
+	Sub     string `json:"sub"`
+}
+
+type Network struct {
+	Client `json:"client"`
+}
+
+type Client struct {
+	IP   string `json:"ip"`
+	Port int    `json:"port"`
 }
 
 type JwtHeader struct {
@@ -195,98 +204,98 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 }
 
 func (jwtPlugin *JwtPlugin) FetchKeys() {
-		for _, u := range jwtPlugin.jwkEndpoints {
-			response, err := http.Get(u.String())
-			if err != nil {
-				// TODO: log warning
-				continue
-			}
-			body, err := ioutil.ReadAll(response.Body)
-			if err != nil {
-				// TODO: log warning
-				continue
-			}
-			var jwksKeys Keys
-			err = json.Unmarshal(body, &jwksKeys)
-			if err != nil {
-				// TODO: log warning
-				continue
-			}
-			for _, key := range jwksKeys.Keys {
-				switch key.Kty {
-				case "RSA":
-					{
-						if key.Kid == "" {
-							key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"e":"%s","kty":"RSA","n":"%s"}`, key.E, key.N))
-							if err != nil {
-								break
-							}
-						}
-						nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
+	for _, u := range jwtPlugin.jwkEndpoints {
+		response, err := http.Get(u.String())
+		if err != nil {
+			// TODO: log warning
+			continue
+		}
+		body, err := ioutil.ReadAll(response.Body)
+		if err != nil {
+			// TODO: log warning
+			continue
+		}
+		var jwksKeys Keys
+		err = json.Unmarshal(body, &jwksKeys)
+		if err != nil {
+			// TODO: log warning
+			continue
+		}
+		for _, key := range jwksKeys.Keys {
+			switch key.Kty {
+			case "RSA":
+				{
+					if key.Kid == "" {
+						key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"e":"%s","kty":"RSA","n":"%s"}`, key.E, key.N))
 						if err != nil {
 							break
 						}
-						eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
-						if err != nil {
-							break
-						}
-						jwtPlugin.keys[key.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: int(new(big.Int).SetBytes(eBytes).Uint64())}
 					}
-				case "EC":
-					{
-						if key.Kid == "" {
-							key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"crv":"P-256","kty":"EC","x":"%s","y":"%s"}`, key.X, key.Y))
-							if err != nil {
-								break
-							}
+					nBytes, err := base64.RawURLEncoding.DecodeString(key.N)
+					if err != nil {
+						break
+					}
+					eBytes, err := base64.RawURLEncoding.DecodeString(key.E)
+					if err != nil {
+						break
+					}
+					jwtPlugin.keys[key.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: int(new(big.Int).SetBytes(eBytes).Uint64())}
+				}
+			case "EC":
+				{
+					if key.Kid == "" {
+						key.Kid, err = JWKThumbprint(fmt.Sprintf(`{"crv":"P-256","kty":"EC","x":"%s","y":"%s"}`, key.X, key.Y))
+						if err != nil {
+							break
 						}
-						var crv elliptic.Curve
-						switch key.Crv {
-						case "P-256":
+					}
+					var crv elliptic.Curve
+					switch key.Crv {
+					case "P-256":
+						crv = elliptic.P256()
+					case "P-384":
+						crv = elliptic.P384()
+					case "P-521":
+						crv = elliptic.P521()
+					default:
+						switch key.Alg {
+						case "ES256":
 							crv = elliptic.P256()
-						case "P-384":
+						case "ES384":
 							crv = elliptic.P384()
-						case "P-521":
+						case "ES512":
 							crv = elliptic.P521()
 						default:
-							switch key.Alg {
-							case "ES256":
-								crv = elliptic.P256()
-							case "ES384":
-								crv = elliptic.P384()
-							case "ES512":
-								crv = elliptic.P521()
-							default:
-								crv = elliptic.P256()
-							}
+							crv = elliptic.P256()
 						}
-						xBytes, err := base64.RawURLEncoding.DecodeString(key.X)
-						if err != nil {
-							break
-						}
-						yBytes, err := base64.RawURLEncoding.DecodeString(key.Y)
-						if err != nil {
-							break
-						}
-						jwtPlugin.keys[key.Kid] = &ecdsa.PublicKey{Curve: crv, X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
 					}
-				case "oct":
-					{
-						kBytes, err := base64.RawURLEncoding.DecodeString(key.K)
+					xBytes, err := base64.RawURLEncoding.DecodeString(key.X)
+					if err != nil {
+						break
+					}
+					yBytes, err := base64.RawURLEncoding.DecodeString(key.Y)
+					if err != nil {
+						break
+					}
+					jwtPlugin.keys[key.Kid] = &ecdsa.PublicKey{Curve: crv, X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
+				}
+			case "oct":
+				{
+					kBytes, err := base64.RawURLEncoding.DecodeString(key.K)
+					if err != nil {
+						break
+					}
+					if key.Kid == "" {
+						key.Kid, err = JWKThumbprint(key.K)
 						if err != nil {
 							break
 						}
-						if key.Kid == "" {
-							key.Kid, err = JWKThumbprint(key.K)
-							if err != nil {
-								break
-							}
-						}
-						jwtPlugin.keys[key.Kid] = kBytes
 					}
+					jwtPlugin.keys[key.Kid] = kBytes
 				}
 			}
 		}
+	}
 }
 
 func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Request) {
@@ -321,13 +330,14 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 					return fmt.Errorf("payload missing required field %s", fieldName)
 				} else {
 					sub := fmt.Sprint(jwtToken.Payload["sub"])
+					network := jwtPlugin.splitRemoteAddr(request.RemoteAddr)
 					jsonLogEvent, _ := json.Marshal(&LogEvent{
-						Level:      "warning",
-						Msg:        fmt.Sprintf("Missing JWT field %s", fieldName),
-						Time:       time.Now(),
-						Sub:        sub,
-						RemoteAddr: request.RemoteAddr,
-						URL:        request.URL.String(),
+						Level:   "warning",
+						Msg:     fmt.Sprintf("Missing JWT field %s", fieldName),
+						Time:    time.Now(),
+						Sub:     sub,
+						Network: network,
+						URL:     request.URL.String(),
 					})
 					fmt.Println(string(jsonLogEvent))
 				}
@@ -382,6 +392,26 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 		return nil, err
 	}
 	return &jwtToken, nil
+}
+
+func (jwtPlugin *JwtPlugin) splitRemoteAddr(remoteAddr string) Network {
+	res := strings.Split(remoteAddr, ":")
+	if len(res) < 2 {
+		return Network{
+			Client: Client{
+				IP:   res[0],
+				Port: -1,
+			},
+		}
+	}
+
+	port, _ := strconv.Atoi(res[1])
+	return Network{
+		Client: Client{
+			IP:   res[0],
+			Port: port,
+		},
+	}
 }
 
 func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {

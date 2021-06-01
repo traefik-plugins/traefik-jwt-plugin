@@ -431,14 +431,6 @@ func (jwtPlugin *JwtPlugin) remoteAddr(req *http.Request) Network {
 			Port: portNumber,
 		},
 	}
-
-	//portNumber, _ := strconv.Atoi(port)
-	//return Network{
-	//	Client: Client{
-	//		IP:   userIP.String(),
-	//		Port: portNumber,
-	//	},
-	//}
 }
 
 func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {

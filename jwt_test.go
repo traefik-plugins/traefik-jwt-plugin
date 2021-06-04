@@ -1,7 +1,9 @@
 package traefik_jwt_plugin_test
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +20,14 @@ func TestServeHTTPOK(t *testing.T) {
 	cfg.Keys = []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"}
 	ctx := context.Background()
 	nextCalled := false
-	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+	type requestType struct {
+		Killroy string `json:"killroy"`
+	}
+	var requestBody requestType
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		_ = json.NewDecoder(req.Body).Decode(&requestBody)
+		nextCalled = true
+	})
 
 	jwt, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
 	if err != nil {
@@ -27,16 +36,20 @@ func TestServeHTTPOK(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", bytes.NewReader([]byte(`{ "killroy": "was here" }`)))
 	if err != nil {
 		t.Fatal(err)
 	}
 	req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A"}
+	req.Header["Content-Type"] = []string{"application/json"}
 
 	jwt.ServeHTTP(recorder, req)
 
 	if nextCalled == false {
 		t.Fatal("next.ServeHTTP was not called")
+	}
+	if requestBody.Killroy != "was here" {
+		t.Fatal("Missing request body")
 	}
 	if v := req.Header.Get("Name"); v != "John Doe" {
 		t.Fatal("Expected header Name:John Doe")
@@ -109,6 +122,15 @@ func TestServeHTTPAllowed(t *testing.T) {
 		if len(param1) != 2 || param1[0] != "foo" || param1[1] != "bar" {
 			t.Fatal(fmt.Sprintf("Parameters incorrect, expected foo,bar but got %s", strings.Join(param1, ",")))
 		}
+		var input traefik_jwt_plugin.Payload
+		_ = json.NewDecoder(r.Body).Decode(&input)
+		if input.Input.Parameters.Get("frodo") != "notpass" {
+			t.Fatal("Missing frodo")
+		}
+		bodyContent := input.Input.Body
+		if bodyContent["baggins"] != "shire" {
+			t.Fatal("Input body payload incorrect")
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprintln(w, `{ "result": { "allow": true, "foo": "Bar" } }`)
 	}))
@@ -129,7 +151,8 @@ func TestServeHTTPAllowed(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost?frodo=notpass", bytes.NewReader([]byte(`{ "baggins": "shire" }`)))
+	req.Header.Add("Content-Type", "application/json")
 	if err != nil {
 		t.Fatal(err)
 	}

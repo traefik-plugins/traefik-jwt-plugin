@@ -17,6 +17,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math/big"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -61,12 +62,21 @@ type JwtPlugin struct {
 
 // LogEvent contains a single log entry
 type LogEvent struct {
-	Level      string    `json:"level"`
-	Msg        string    `json:"msg"`
-	Time       time.Time `json:"time"`
-	RemoteAddr string    `json:"remote"`
-	URL        string    `json:"url"`
-	Sub        string    `json:"sub"`
+	Level   string    `json:"level"`
+	Msg     string    `json:"msg"`
+	Time    time.Time `json:"time"`
+	Network `json:"network"`
+	URL     string `json:"url"`
+	Sub     string `json:"sub"`
+}
+
+type Network struct {
+	Client `json:"client"`
+}
+
+type Client struct {
+	IP   string `json:"ip"`
+	Port int    `json:"port"`
 }
 
 type JwtHeader struct {
@@ -324,13 +334,14 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 					return fmt.Errorf("payload missing required field %s", fieldName)
 				} else {
 					sub := fmt.Sprint(jwtToken.Payload["sub"])
+					network := jwtPlugin.remoteAddr(request)
 					jsonLogEvent, _ := json.Marshal(&LogEvent{
-						Level:      "warning",
-						Msg:        fmt.Sprintf("Missing JWT field %s", fieldName),
-						Time:       time.Now(),
-						Sub:        sub,
-						RemoteAddr: request.RemoteAddr,
-						URL:        request.URL.String(),
+						Level:   "warning",
+						Msg:     fmt.Sprintf("Missing JWT field %s", fieldName),
+						Time:    time.Now(),
+						Sub:     sub,
+						Network: network,
+						URL:     request.URL.String(),
 					})
 					fmt.Println(string(jsonLogEvent))
 				}
@@ -383,6 +394,44 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 		return nil, err
 	}
 	return &jwtToken, nil
+}
+
+func (jwtPlugin *JwtPlugin) remoteAddr(req *http.Request) Network {
+	// This will only be defined when site is accessed via non-anonymous proxy
+	// and takes precedence over RemoteAddr
+	// Header.Get is case-insensitive
+	ipHeader := req.Header.Get("X-Forwarded-For")
+	if len(ipHeader) == 0 {
+		ipHeader = req.RemoteAddr
+	}
+
+	ip, port, err := net.SplitHostPort(ipHeader)
+	portNumber, _ := strconv.Atoi(port)
+	if err == nil {
+		return Network{
+			Client: Client{
+				IP:   ip,
+				Port: portNumber,
+			},
+		}
+	}
+
+	userIP := net.ParseIP(ipHeader)
+	if userIP == nil {
+		return Network{
+			Client: Client{
+				IP:   ipHeader,
+				Port: portNumber,
+			},
+		}
+	}
+
+	return Network{
+		Client: Client{
+			IP:   userIP.String(),
+			Port: portNumber,
+		},
+	}
 }
 
 func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {

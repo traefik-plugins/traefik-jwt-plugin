@@ -14,6 +14,95 @@ import (
 )
 
 func TestServeHTTPOK(t *testing.T) {
+	var tests = []struct {
+		name         string
+		remoteAddr   string
+		forwardedFor string
+	}{
+		{
+			name:         "x-forwarded-for, ipv4, no port",
+			forwardedFor: "127.0.0.1",
+		},
+		{
+			name:         "x-forwarded-for, ipv4, with port",
+			forwardedFor: "127.0.0.1:1234",
+		},
+		{
+			name:         "x-forwarded-for, ipv6, localhost, no port",
+			forwardedFor: "::1",
+		},
+		{
+			name:         "x-forwarded-for, ipv6, no port",
+			forwardedFor: "2001:4860:0:2001::68",
+		},
+		{
+			name:         "x-forwarded-for, ipv6, with port",
+			forwardedFor: "[1fff:0:a88:85a3::ac1f]:8001",
+		},
+		{
+			name:       "remoteAddr, ipv4, no port",
+			remoteAddr: "127.0.0.1",
+		},
+		{
+			name:       "remoteAddr, ipv4, with port",
+			remoteAddr: "127.0.0.1:1234",
+		},
+		{
+			name:       "remoteAddr, ipv6, localhost, no port",
+			remoteAddr: "::1",
+		},
+		{
+			name:       "remoteAddr, ipv6, no port",
+			remoteAddr: "2001:4860:0:2001::68",
+		},
+		{
+			name:       "remoteAddr, ipv6, with port",
+			remoteAddr: "[1fff:0:a88:85a3::ac1f]:8001",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := traefik_jwt_plugin.CreateConfig()
+			cfg.PayloadFields = []string{"exp"}
+			cfg.JwtHeaders = map[string]string{"Name": "name"}
+			cfg.Keys = []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"}
+			ctx := context.Background()
+			nextCalled := false
+			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+			jwt, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			recorder := httptest.NewRecorder()
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A"}
+			if len(tt.forwardedFor) > 0 {
+				req.Header["X-Forwarded-For"] = []string{tt.forwardedFor}
+			}
+			if len(tt.remoteAddr) > 0 {
+				req.RemoteAddr = tt.remoteAddr
+			}
+
+			jwt.ServeHTTP(recorder, req)
+
+			if nextCalled == false {
+				t.Fatal("next.ServeHTTP was not called")
+			}
+			if v := req.Header.Get("Name"); v != "John Doe" {
+				t.Fatal("Expected header Name:John Doe")
+			}
+		})
+	}
+}
+
+func TestServeWithBody(t *testing.T) {
 	cfg := traefik_jwt_plugin.CreateConfig()
 	cfg.PayloadFields = []string{"exp"}
 	cfg.JwtHeaders = map[string]string{"Name": "name"}
@@ -55,6 +144,8 @@ func TestServeHTTPOK(t *testing.T) {
 		t.Fatal("Expected header Name:John Doe")
 	}
 }
+
+
 
 func TestServeHTTPInvalidSignature(t *testing.T) {
 	cfg := traefik_jwt_plugin.CreateConfig()

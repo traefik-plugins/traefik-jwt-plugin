@@ -17,6 +17,8 @@ import (
 	"io"
 	"io/ioutil"
 	"math/big"
+	"mime"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/url"
@@ -134,7 +136,7 @@ type PayloadInput struct {
 	JWTHeader  JwtHeader              `json:"tokenHeader"`
 	JWTPayload map[string]interface{} `json:"tokenPayload"`
 	Body       map[string]interface{} `json:"body,omitempty"`
-	Form       map[string][]string    `json:"form,omitempty"`
+	Form       url.Values             `json:"form,omitempty"`
 }
 
 // Payload for OPA requests
@@ -513,8 +515,11 @@ func toOPAPayload(request *http.Request) (*Payload, error) {
 		Parameters: request.URL.Query(),
 		Headers:    request.Header,
 	}
-	contentType := parseHeader(request.Header.Get("Content-Type"))
-	var err error
+	contentTypeHeader := parseHeader(request.Header.Get("Content-Type"))
+	contentType, params, err := mime.ParseMediaType(contentTypeHeader)
+	if err != nil {
+		return nil, err
+	}
 	var save []byte
 	save, request.Body, err = drainBody(request.Body)
 	if err == nil {
@@ -527,6 +532,18 @@ func toOPAPayload(request *http.Request) (*Payload, error) {
 			input.Form, err = url.ParseQuery(string(save))
 			if err != nil {
 				return nil, err
+			}
+		} else if contentType == "multipart/form-data" || contentType == "multipart/mixed" {
+			boundary := params["boundary"]
+			mr := multipart.NewReader(bytes.NewReader(save), boundary)
+			f, err := mr.ReadForm(32 << 20)
+			if err != nil {
+				return nil, err
+			}
+
+			input.Form = make(url.Values)
+			for k, v := range f.Value {
+				input.Form[k] = append(input.Form[k], v...)
 			}
 		}
 	}

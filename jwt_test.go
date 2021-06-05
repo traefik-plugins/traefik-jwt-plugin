@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -102,6 +105,99 @@ func TestServeHTTPOK(t *testing.T) {
 	}
 }
 
+func TestServeOPAWithBody(t *testing.T) {
+	var tests = []struct {
+		name         string
+		method       string
+		contentType  string
+		body         string
+		expectedBody map[string]interface{}
+		expectedForm url.Values
+	}{
+		{
+			name:   "get",
+			method: "GET",
+		},
+		{
+			name:        "json",
+			method:      "POST",
+			contentType: "application/json",
+			body:        `{ "killroy": "washere" }`,
+			expectedBody: map[string]interface{}{
+				"killroy": "washere",
+			},
+		},
+		{
+			name:        "form",
+			method:      "POST",
+			contentType: "application/x-www-url-formencoded",
+			body:        `foo=bar&bar=foo`,
+			expectedForm: map[string][]string{
+				"foo": {"bar"},
+				"bar": {"foo"},
+			},
+		},
+		{
+			name:        "multipart",
+			method:      "POST",
+			contentType: "multipart/form-data; boundary=----boundary",
+			body:        `----boundary\nContent-Disposition: form-data; name="field1"\n\nblabla\n----boundary--`,
+			expectedForm: map[string][]string{
+				"field1": {"blabla"},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var input traefik_jwt_plugin.Payload
+				err := json.NewDecoder(r.Body).Decode(&input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if tt.expectedBody != nil && !reflect.DeepEqual(input.Input.Body, tt.expectedBody) {
+					t.Fatalf("Expected %v, got %v", tt.expectedBody, input.Input.Body)
+				}
+				if tt.expectedForm != nil && !reflect.DeepEqual(input.Input.Form, tt.expectedForm) {
+					t.Fatalf("Expected %v, got %v", tt.expectedForm, input.Input.Form)
+				}
+				w.WriteHeader(http.StatusOK)
+				_, _ = fmt.Fprintln(w, `{ "result": { "allow": true, "foo": "Bar" } }`)
+			}))
+			defer ts.Close()
+			cfg := traefik_jwt_plugin.CreateConfig()
+			cfg.OpaUrl = fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL)
+			cfg.OpaAllowField = "allow"
+			ctx := context.Background()
+			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+				body, err := io.ReadAll(req.Body)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if tt.body != "" && string(body) != tt.body {
+					t.Fatalf("Incorrect body, expected %v, received %v", tt.body, string(body))
+				}
+			})
+
+			jwt, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			recorder := httptest.NewRecorder()
+
+			req, err := http.NewRequestWithContext(ctx, tt.method, "http://localhost", bytes.NewReader([]byte(tt.body)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A"}
+			req.Header["Content-Type"] = []string{tt.contentType}
+
+			jwt.ServeHTTP(recorder, req)
+		})
+	}
+}
+
 func TestServeWithBody(t *testing.T) {
 	cfg := traefik_jwt_plugin.CreateConfig()
 	cfg.PayloadFields = []string{"exp"}
@@ -144,8 +240,6 @@ func TestServeWithBody(t *testing.T) {
 		t.Fatal("Expected header Name:John Doe")
 	}
 }
-
-
 
 func TestServeHTTPInvalidSignature(t *testing.T) {
 	cfg := traefik_jwt_plugin.CreateConfig()

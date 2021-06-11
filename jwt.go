@@ -225,6 +225,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 		err = json.Unmarshal(body, &jwksKeys)
 		if err != nil {
 			// TODO: log warning
+			fmt.Printf("JWK failed: %v", err)
 			continue
 		}
 		for _, key := range jwksKeys.Keys {
@@ -319,7 +320,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 	}
 	if jwtToken != nil {
 		// only verify jwt tokens if keys are configured
-		if len(jwtPlugin.keys) > 0 {
+		if len(jwtPlugin.keys) > 0 || len(jwtPlugin.jwkEndpoints) > 0 {
 			if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
 				return err
 			}
@@ -515,47 +516,37 @@ func toOPAPayload(request *http.Request) (*Payload, error) {
 		Parameters: request.URL.Query(),
 		Headers:    request.Header,
 	}
-	contentTypeHeader := parseHeader(request.Header.Get("Content-Type"))
-	contentType, params, err := mime.ParseMediaType(contentTypeHeader)
-	if err != nil {
-		return nil, err
-	}
-	var save []byte
-	save, request.Body, err = drainBody(request.Body)
+	contentType, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
 	if err == nil {
-		if contentType == "application/json" {
-			err = json.Unmarshal(save, &input.Body)
-			if err != nil {
-				return nil, err
-			}
-		} else if contentType == "application/x-www-url-formencoded" {
-			input.Form, err = url.ParseQuery(string(save))
-			if err != nil {
-				return nil, err
-			}
-		} else if contentType == "multipart/form-data" || contentType == "multipart/mixed" {
-			boundary := params["boundary"]
-			mr := multipart.NewReader(bytes.NewReader(save), boundary)
-			f, err := mr.ReadForm(32 << 20)
-			if err != nil {
-				return nil, err
-			}
+		var save []byte
+		save, request.Body, err = drainBody(request.Body)
+		if err == nil {
+			if contentType == "application/json" {
+				err = json.Unmarshal(save, &input.Body)
+				if err != nil {
+					return nil, err
+				}
+			} else if contentType == "application/x-www-url-formencoded" {
+				input.Form, err = url.ParseQuery(string(save))
+				if err != nil {
+					return nil, err
+				}
+			} else if contentType == "multipart/form-data" || contentType == "multipart/mixed" {
+				boundary := params["boundary"]
+				mr := multipart.NewReader(bytes.NewReader(save), boundary)
+				f, err := mr.ReadForm(32 << 20)
+				if err != nil {
+					return nil, err
+				}
 
-			input.Form = make(url.Values)
-			for k, v := range f.Value {
-				input.Form[k] = append(input.Form[k], v...)
+				input.Form = make(url.Values)
+				for k, v := range f.Value {
+					input.Form[k] = append(input.Form[k], v...)
+				}
 			}
 		}
 	}
 	return &Payload{Input: input}, nil
-}
-
-func parseHeader(value string) string {
-	i := strings.Index(value, ";")
-	if i == -1 {
-		i = len(value)
-	}
-	return strings.TrimSpace(strings.ToLower(value[0:i]))
 }
 
 func drainBody(b io.ReadCloser) ([]byte, io.ReadCloser, error) {
@@ -617,7 +608,8 @@ func verifyHMAC(key interface{}, hash crypto.Hash, payload []byte, signature []b
 	if _, err := mac.Write(payload); err != nil {
 		return err
 	}
-	if !hmac.Equal(signature, mac.Sum([]byte{})) {
+	sum := mac.Sum([]byte{})
+	if !hmac.Equal(signature, sum) {
 		return fmt.Errorf("token verification failed (HMAC)")
 	}
 	return nil

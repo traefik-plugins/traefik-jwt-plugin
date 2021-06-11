@@ -17,49 +17,6 @@ import (
 	traefik_jwt_plugin "github.com/team-carepay/traefik-jwt-plugin"
 )
 
-var rsaCertPEM = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkvrllkN3t0cm6r01ngZn
-2Vjqf3pwiiGf5KVoadkxuPWBLmpt+tbmNK8gIcqW0u6ER5dLkFTPcPZ9Vmnuzvgp
-yQMXIsBCj+s3/geeDAd+o9V3YyDpxbn4spzJX3VquOEXxxol0aOUYLchNs5eiLEm
-IEG9sWwvmRO55yxG8w+3xVBgP6PapT8fzBVUgSoMAKms0exeNQE3/vwS0/5wvbAi
-iok7+Z7qB23GNl0YO8pgWCCiil9s5WNg1Tif+fcddREIki94Xac0q7uTSqNsCZcC
-LbyeOPZEIhXc4g2imEZ7RD52Ka4+C8FXyRGKKtUq5EQ6MWe67L0TVpEqUUsLLmRH
-gwIDAQAB
------END PUBLIC KEY-----
-`
-
-var rsaKeyPEM = testingKey(`-----BEGIN TESTING KEY-----
-MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCS+uWWQ3e3Rybq
-vTWeBmfZWOp/enCKIZ/kpWhp2TG49YEuam361uY0ryAhypbS7oRHl0uQVM9w9n1W
-ae7O+CnJAxciwEKP6zf+B54MB36j1XdjIOnFufiynMlfdWq44RfHGiXRo5RgtyE2
-zl6IsSYgQb2xbC+ZE7nnLEbzD7fFUGA/o9qlPx/MFVSBKgwAqazR7F41ATf+/BLT
-/nC9sCKKiTv5nuoHbcY2XRg7ymBYIKKKX2zlY2DVOJ/59x11EQiSL3hdpzSru5NK
-o2wJlwItvJ449kQiFdziDaKYRntEPnYprj4LwVfJEYoq1SrkRDoxZ7rsvRNWkSpR
-SwsuZEeDAgMBAAECggEAQr51gHltxUglx4YZcYPGJ+BlSHNQ5KElSz7DvgFXv36Y
-5XuGKtjom/cEt+OX/vw6DIqLUWT5+HmubA3Z2Jm/29yv5mN5NoKhoBVUc3D51Kss
-tlKtZdEwOufQ2CzpREBPPGZG0z6dtBelGQ64xgjv38kKu6V9rd1T18L3CwxRruND
-LzzBSJwlSPF//o8cCr489oMoYi6HBIAqB9khqut/EdSk0utU2qFEpjf+AME4z4oi
-Lw2d8FvLn7e1ASDwenqoJ2UC0h3g3WwDkqxCtwqBlE4W5RhTFKmAtsDcEM8eUbxu
-K3WSuA+L8NSDKlmfDsByGT+nHPtHIQwDS+Swlne/iQKBgQDJN3SjiiKg5hwVWkOV
-+5WqCB5YBOZOvUdbJhxehc++iinJtK1ojNH0I4Bqiu5T5NZyM40X3KQ0RumBPzIt
-Rh+zpyLgsDyQT33XNlDnMXxj2DOsEBO5xsZP+UizQhIpj/ndSvv0RWarBi9BXrhp
-mTzY6OyaKZFqbgTk03SHuC/uiwKBgQC6/zi/AGX84wiY9e/NSvIPsYZK/hBP0FfD
-kkchtt7uxCX6taDZ3E8oOQ7aIYkJ6RcnzwPNaBOU1WbcEvQHawfl3sBO3D6CdQzl
-l0+RxB2FSEuFhxaA8AabQm6A5f+LdHpGRAsOF8uzbcsUmxdhLORElc1feWIrdU9Y
-RChFfdTh6QKBgET5Rnk8w6wF1QCYxWwnJmF3kPc5Dr1U8p3TDYx1MAYvlC15Sqv5
-AYs/lChxYUrOuZfCBg506rCk0iwkvo14aSuLElCU+N268fcQvmDRvML4/JVxmWFo
-Oth1Ki+QaWtn2A28Q2uzUoMzhoVQ88P27D2qclhSAW/LMNBDj8FqKLwLAoGAI9fb
-9rCK3Ahgk4FAr+cXsu5iQWmlksbqq7AUNmApJzct2HqMFHZoLduR/znCXMXzDExf
-/DVg23x0NOblI67eWq9xySvqR3NMP43bUKN4zR1obHXSWHCps4TuTYLIkuCGt4U/
-YToqb4AyFwcLWjMSphrYvN41dQMNbGvUFE3kSlECgYBsiLKHY5xNp+idvY2E3AHF
-JaNOk5egwFVAI83502mkzg0PcWeFM/IKDcP74+GTf7ufo6yrSx7x3MOxWNXsaGCV
-Su9zwn2RfpGmyRF+a+vC9ZompKFtOIi4PL3eMw3zrKXc/Vmm0wBAdRsgi+97C5Sv
-2SOQ1LMNBMiuf5kSyVDfiA==
------END TESTING KEY-----
-`)
-
-func testingKey(s string) string { return strings.ReplaceAll(s, "TESTING KEY", "PRIVATE KEY") }
-
 func TestServeHTTPOK(t *testing.T) {
 	var tests = []struct {
 		name         string

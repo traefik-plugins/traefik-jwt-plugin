@@ -14,8 +14,12 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/big"
+	"mime"
+	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -60,12 +64,21 @@ type JwtPlugin struct {
 
 // LogEvent contains a single log entry
 type LogEvent struct {
-	Level      string    `json:"level"`
-	Msg        string    `json:"msg"`
-	Time       time.Time `json:"time"`
-	RemoteAddr string    `json:"remote"`
-	URL        string    `json:"url"`
-	Sub        string    `json:"sub"`
+	Level   string    `json:"level"`
+	Msg     string    `json:"msg"`
+	Time    time.Time `json:"time"`
+	Network `json:"network"`
+	URL     string `json:"url"`
+	Sub     string `json:"sub"`
+}
+
+type Network struct {
+	Client `json:"client"`
+}
+
+type Client struct {
+	IP   string `json:"ip"`
+	Port int    `json:"port"`
 }
 
 type JwtHeader struct {
@@ -122,6 +135,8 @@ type PayloadInput struct {
 	Headers    map[string][]string    `json:"headers"`
 	JWTHeader  JwtHeader              `json:"tokenHeader"`
 	JWTPayload map[string]interface{} `json:"tokenPayload"`
+	Body       map[string]interface{} `json:"body,omitempty"`
+	Form       url.Values             `json:"form,omitempty"`
 }
 
 // Payload for OPA requests
@@ -304,7 +319,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 	}
 	if jwtToken != nil {
 		// only verify jwt tokens if keys are configured
-		if len(jwtPlugin.keys) > 0 {
+		if len(jwtPlugin.keys) > 0 || len(jwtPlugin.jwkEndpoints) > 0 {
 			if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
 				return err
 			}
@@ -315,13 +330,14 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 					return fmt.Errorf("payload missing required field %s", fieldName)
 				} else {
 					sub := fmt.Sprint(jwtToken.Payload["sub"])
+					network := jwtPlugin.remoteAddr(request)
 					jsonLogEvent, _ := json.Marshal(&LogEvent{
-						Level:      "warning",
-						Msg:        fmt.Sprintf("Missing JWT field %s", fieldName),
-						Time:       time.Now(),
-						Sub:        sub,
-						RemoteAddr: request.RemoteAddr,
-						URL:        request.URL.String(),
+						Level:   "warning",
+						Msg:     fmt.Sprintf("Missing JWT field %s", fieldName),
+						Time:    time.Now(),
+						Sub:     sub,
+						Network: network,
+						URL:     request.URL.String(),
 					})
 					fmt.Println(string(jsonLogEvent))
 				}
@@ -345,12 +361,10 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	authHeader, ok := request.Header["Authorization"]
 	if !ok {
-		fmt.Println("No Authorization header found")
 		return nil, nil
 	}
 	auth := authHeader[0]
 	if !strings.HasPrefix(auth, "Bearer ") {
-		fmt.Println("No bearer token")
 		return nil, nil
 	}
 	parts := strings.Split(auth[7:], ".")
@@ -384,6 +398,44 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	return &jwtToken, nil
 }
 
+func (jwtPlugin *JwtPlugin) remoteAddr(req *http.Request) Network {
+	// This will only be defined when site is accessed via non-anonymous proxy
+	// and takes precedence over RemoteAddr
+	// Header.Get is case-insensitive
+	ipHeader := req.Header.Get("X-Forwarded-For")
+	if len(ipHeader) == 0 {
+		ipHeader = req.RemoteAddr
+	}
+
+	ip, port, err := net.SplitHostPort(ipHeader)
+	portNumber, _ := strconv.Atoi(port)
+	if err == nil {
+		return Network{
+			Client: Client{
+				IP:   ip,
+				Port: portNumber,
+			},
+		}
+	}
+
+	userIP := net.ParseIP(ipHeader)
+	if userIP == nil {
+		return Network{
+			Client: Client{
+				IP:   ipHeader,
+				Port: portNumber,
+			},
+		}
+	}
+
+	return Network{
+		Client: Client{
+			IP:   userIP.String(),
+			Port: portNumber,
+		},
+	}
+}
+
 func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
 	for _, h := range jwtToken.Header.Crit {
 		if _, ok := supportedHeaderNames[h]; !ok {
@@ -413,7 +465,10 @@ func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
 }
 
 func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
-	opaPayload := toOPAPayload(request)
+	opaPayload, err := toOPAPayload(request)
+	if err != nil {
+		return err
+	}
 	if token != nil {
 		opaPayload.Input.JWTHeader = token.Header
 		opaPayload.Input.JWTPayload = token.Payload
@@ -452,17 +507,70 @@ func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
 	return nil
 }
 
-func toOPAPayload(request *http.Request) *Payload {
-	return &Payload{
-		Input: &PayloadInput{
-			Host:       request.Host,
-			Method:     request.Method,
-			Path:       strings.Split(request.URL.Path, "/")[1:],
-			Parameters: request.URL.Query(),
-			Headers:    request.Header,
-		},
+func toOPAPayload(request *http.Request) (*Payload, error) {
+	input := &PayloadInput{
+		Host:       request.Host,
+		Method:     request.Method,
+		Path:       strings.Split(request.URL.Path, "/")[1:],
+		Parameters: request.URL.Query(),
+		Headers:    request.Header,
 	}
+	contentType, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err == nil {
+		var save []byte
+		save, request.Body, err = drainBody(request.Body)
+		if err == nil {
+			if contentType == "application/json" {
+				err = json.Unmarshal(save, &input.Body)
+				if err != nil {
+					return nil, err
+				}
+			} else if contentType == "application/x-www-url-formencoded" {
+				input.Form, err = url.ParseQuery(string(save))
+				if err != nil {
+					return nil, err
+				}
+			} else if contentType == "multipart/form-data" || contentType == "multipart/mixed" {
+				boundary := params["boundary"]
+				mr := multipart.NewReader(bytes.NewReader(save), boundary)
+				f, err := mr.ReadForm(32 << 20)
+				if err != nil {
+					return nil, err
+				}
+
+				input.Form = make(url.Values)
+				for k, v := range f.Value {
+					input.Form[k] = append(input.Form[k], v...)
+				}
+			}
+		}
+	}
+	return &Payload{Input: input}, nil
 }
+
+func drainBody(b io.ReadCloser) ([]byte, io.ReadCloser, error) {
+	if b == nil || b == http.NoBody {
+		// No copying needed. Preserve the magic sentinel meaning of NoBody.
+		return nil, http.NoBody, nil
+	}
+	body, err := ioutil.ReadAll(b)
+	if err != nil {
+		return nil, b, err
+	}
+	return body, NopCloser(bytes.NewReader(body), b), nil
+}
+
+func NopCloser(r io.Reader, c io.Closer) io.ReadCloser {
+	return nopCloser{r: r, c: c}
+}
+
+type nopCloser struct {
+	r io.Reader
+	c io.Closer
+}
+
+func (n nopCloser) Read(b []byte) (int, error) { return n.r.Read(b) }
+func (n nopCloser) Close() error               { return n.c.Close() }
 
 type tokenVerifyFunction func(key interface{}, hash crypto.Hash, payload []byte, signature []byte) error
 type tokenVerifyAsymmetricFunction func(key interface{}, hash crypto.Hash, digest []byte, signature []byte) error
@@ -499,7 +607,8 @@ func verifyHMAC(key interface{}, hash crypto.Hash, payload []byte, signature []b
 	if _, err := mac.Write(payload); err != nil {
 		return err
 	}
-	if !hmac.Equal(signature, mac.Sum([]byte{})) {
+	sum := mac.Sum([]byte{})
+	if !hmac.Equal(signature, sum) {
 		return fmt.Errorf("token verification failed (HMAC)")
 	}
 	return nil

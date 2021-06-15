@@ -225,7 +225,6 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 		err = json.Unmarshal(body, &jwksKeys)
 		if err != nil {
 			// TODO: log warning
-			fmt.Printf("JWK failed: %v", err)
 			continue
 		}
 		for _, key := range jwksKeys.Keys {
@@ -324,12 +323,6 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 			if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
 				return err
 			}
-			for k, v := range jwtPlugin.jwtHeaders {
-				value, ok := jwtToken.Payload[v]
-				if ok {
-					request.Header.Add(k, value.(string))
-				}
-			}
 		}
 		for _, fieldName := range jwtPlugin.payloadFields {
 			if _, ok := jwtToken.Payload[fieldName]; !ok {
@@ -348,6 +341,12 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 					})
 					fmt.Println(string(jsonLogEvent))
 				}
+			}
+		}
+		for k, v := range jwtPlugin.jwtHeaders {
+			value, ok := jwtToken.Payload[v]
+			if ok {
+				request.Header.Add(k, value.(string))
 			}
 		}
 	}

@@ -490,9 +490,15 @@ func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
 	if err != nil {
 		return err
 	}
+	if len(result.Result) == 0 {
+		return fmt.Errorf("OPA result invalid")
+	}
+	fieldResult, ok := result.Result[jwtPlugin.opaAllowField]
+	if !ok {
+		return fmt.Errorf("OPA result missing: %v", jwtPlugin.opaAllowField)
+	}
 	var allow bool
-
-	if err = json.Unmarshal(result.Result[jwtPlugin.opaAllowField], &allow); err != nil {
+	if err = json.Unmarshal(fieldResult, &allow); err != nil {
 		return err
 	}
 	if !allow {

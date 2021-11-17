@@ -4,7 +4,7 @@ Supports RSA, ECDSA and symmetric keys. Supports Open Policy Agent (OPA) for add
 
 Features:
 * RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384, ES512, HS256, HS384, HS512
-* Certificates or public keys can be configured in the dynamic config 
+* Certificates or public keys can be configured in the dynamic config
 * Supports JWK endpoints for fetching keys remotely
 * Reject a request or Log warning when required field is missing from JWT payload
 * Validate request with Open Policy Agent
@@ -41,10 +41,10 @@ The plugin currently supports the following configuration settings: (all fields 
 
 Name | Description
 --- | ---
-OpaUrl | URL for Open Policy Agent (e.g. http://opa:8181/v1/data/example) 
+OpaUrl | URL for Open Policy Agent (e.g. http://opa:8181/v1/data/example)
 OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not
 PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`). Multiple field names may be specificied (string array)
-Required | When true, in case the JWT payload is missing a field, the request will be forbidden
+Required | When true, in case there is no or the JWT payload is missing a field, the request will be forbidden
 Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.
 Alg | Used to verify which PKI algorithm is used in the JWT
 Iss | Used to verify the issuer of the JWT

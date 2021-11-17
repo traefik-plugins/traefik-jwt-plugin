@@ -323,7 +323,7 @@ func TestServeHTTPAllowed(t *testing.T) {
 			t.Fatal("Missing frodo")
 		}
 		bodyContent := input.Input.Body
-		if bodyContent["baggins"] != "shire" {
+		if fmt.Sprintf("%s", bodyContent["baggins"]) != "shire" {
 			t.Fatal("Input body payload incorrect")
 		}
 		w.WriteHeader(http.StatusOK)

@@ -24,6 +24,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -39,6 +40,7 @@ type Config struct {
 	Aud           string
 	OpaHeaders    map[string]string
 	JwtHeaders    map[string]string
+	ExpiryCheck   bool
 }
 
 // CreateConfig creates a new OPA Config
@@ -60,6 +62,7 @@ type JwtPlugin struct {
 	aud           string
 	opaHeaders    map[string]string
 	jwtHeaders    map[string]string
+	mu            sync.Mutex
 }
 
 // LogEvent contains a single log entry
@@ -173,7 +176,9 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 
 func (jwtPlugin *JwtPlugin) BackgroundRefresh() {
 	for {
+		jwtPlugin.mu.Lock()
 		jwtPlugin.FetchKeys()
+		jwtPlugin.mu.Unlock()
 		time.Sleep(15 * time.Minute) // 15 min
 	}
 }
@@ -210,21 +215,54 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 }
 
 func (jwtPlugin *JwtPlugin) FetchKeys() {
+	jsonLogEvent, _ := json.Marshal(&LogEvent{
+		Level: "info",
+		Msg:   fmt.Sprintf("FetchKeys - #%d jwkEndpoints to fetch", len(jwtPlugin.jwkEndpoints)),
+		Time:  time.Now(),
+		Sub:   "",
+		URL:   "",
+	})
+	fmt.Println(string(jsonLogEvent))
+
 	for _, u := range jwtPlugin.jwkEndpoints {
 		response, err := http.Get(u.String())
 		if err != nil {
 			// TODO: log warning
+			jsonLogEvent, _ := json.Marshal(&LogEvent{
+				Level: "warning",
+				Msg:   fmt.Sprintf("FetchKeys - Failed to fetch keys"),
+				Time:  time.Now(),
+				Sub:   "",
+				URL:   u.String(),
+			})
+			fmt.Println(string(jsonLogEvent))
 			continue
 		}
 		body, err := ioutil.ReadAll(response.Body)
 		if err != nil {
 			// TODO: log warning
+			jsonLogEvent, _ := json.Marshal(&LogEvent{
+				Level: "warning",
+				Msg:   fmt.Sprintf("FetchKeys - Failed to read keys"),
+				Time:  time.Now(),
+				Sub:   "",
+				URL:   u.String(),
+			})
+			fmt.Println(string(jsonLogEvent))
 			continue
 		}
 		var jwksKeys Keys
 		err = json.Unmarshal(body, &jwksKeys)
 		if err != nil {
 			// TODO: log warning
+			jsonLogEvent, _ := json.Marshal(&LogEvent{
+				Level: "warning",
+				Msg:   fmt.Sprintf("FetchKeys - Failed to unmarshall jwksKeys"),
+				Time:  time.Now(),
+				Sub:   "",
+				URL:   u.String(),
+			})
+			fmt.Println(string(jsonLogEvent))
 			continue
 		}
 		for _, key := range jwksKeys.Keys {
@@ -245,7 +283,16 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 					if err != nil {
 						break
 					}
-					jwtPlugin.keys[key.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: int(new(big.Int).SetBytes(eBytes).Uint64())}
+					// Bypass Yaegi strange behavior - avoid resuing same address at each iteration
+					// -> all array element point to the same address accessing only the latest value ;-(
+					// jwtPlugin.keys[key.Kid] = &rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: int(new(big.Int).SetBytes(eBytes).Uint64())}
+					// sol1
+					ptr := new(rsa.PublicKey)
+					ptr.N = new(big.Int).SetBytes(nBytes)
+					ptr.E = int(new(big.Int).SetBytes(eBytes).Uint64())
+					jwtPlugin.keys[key.Kid] = ptr
+					// sol2 + adapt verify function with new type (from pointer to real object structure)
+					// jwtPlugin.keys[key.Kid] = rsa.PublicKey{N: new(big.Int).SetBytes(nBytes), E: int(new(big.Int).SetBytes(eBytes).Uint64())}
 				}
 			case "EC":
 				{
@@ -283,7 +330,17 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 					if err != nil {
 						break
 					}
-					jwtPlugin.keys[key.Kid] = &ecdsa.PublicKey{Curve: crv, X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
+					// Bypass Yaegi strange behavior - avoid resuing same address at each iteration
+					// -> all array element point to the same address accessing only the latest value ;-(
+					// jwtPlugin.keys[key.Kid] = &ecdsa.PublicKey{Curve: crv, X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
+					// sol1
+					ptr := new(ecdsa.PublicKey)
+					ptr.Curve = crv
+					ptr.X = new(big.Int).SetBytes(xBytes)
+					ptr.Y = new(big.Int).SetBytes(yBytes)
+					jwtPlugin.keys[key.Kid] = ptr
+					// sol2
+					// jwtPlugin.keys[key.Kid] = ecdsa.PublicKey{Curve: crv, X: new(big.Int).SetBytes(xBytes), Y: new(big.Int).SetBytes(yBytes)}
 				}
 			case "oct":
 				{
@@ -313,24 +370,60 @@ func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Requ
 }
 
 func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
+	network := jwtPlugin.remoteAddr(request)
+	sub := ""
+
 	jwtToken, err := jwtPlugin.ExtractToken(request)
 	if err != nil {
 		return err
 	}
+
+	// JWT token required
+	if jwtToken == nil && (len(jwtPlugin.keys) > 0 || len(jwtPlugin.jwkEndpoints) > 0) {
+		jsonLogEvent, _ := json.Marshal(&LogEvent{
+			Level:   "error",
+			Msg:     fmt.Sprintf("Missing JWT while keys are configured (#keys: %d, #jwkEndpoints: %d)", len(jwtPlugin.keys), len(jwtPlugin.jwkEndpoints)),
+			Time:    time.Now(),
+			Sub:     sub,
+			Network: network,
+			URL:     request.URL.String(),
+		})
+		fmt.Println(string(jsonLogEvent))
+		return fmt.Errorf("Authorization header with JWT Token is required (Authorization: Bearer <JWT>) !!!")
+	}
+
 	if jwtToken != nil {
+		sub = fmt.Sprint(jwtToken.Payload["sub"])
+
 		// only verify jwt tokens if keys are configured
 		if len(jwtPlugin.keys) > 0 || len(jwtPlugin.jwkEndpoints) > 0 {
 			if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
+				jsonLogEvent, _ := json.Marshal(&LogEvent{
+					Level:   "error",
+					Msg:     fmt.Sprintf("Token is invalid - err: %s", err.Error()),
+					Time:    time.Now(),
+					Sub:     sub,
+					Network: network,
+					URL:     request.URL.String(),
+				})
+				fmt.Println(string(jsonLogEvent))
 				return err
 			}
 		}
 		for _, fieldName := range jwtPlugin.payloadFields {
 			if _, ok := jwtToken.Payload[fieldName]; !ok {
 				if jwtPlugin.required {
+					jsonLogEvent, _ := json.Marshal(&LogEvent{
+						Level:   "error",
+						Msg:     fmt.Sprintf("Missing JWT field %s", fieldName),
+						Time:    time.Now(),
+						Sub:     sub,
+						Network: network,
+						URL:     request.URL.String(),
+					})
+					fmt.Println(string(jsonLogEvent))
 					return fmt.Errorf("payload missing required field %s", fieldName)
 				} else {
-					sub := fmt.Sprint(jwtToken.Payload["sub"])
-					network := jwtPlugin.remoteAddr(request)
 					jsonLogEvent, _ := json.Marshal(&LogEvent{
 						Level:   "warning",
 						Msg:     fmt.Sprintf("Missing JWT field %s", fieldName),
@@ -344,14 +437,23 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 			}
 		}
 		for k, v := range jwtPlugin.jwtHeaders {
-			value, ok := jwtToken.Payload[v]
+			_, ok := jwtToken.Payload[v]
 			if ok {
-				request.Header.Add(k, value.(string))
+				request.Header.Add(k, fmt.Sprintf("%v", jwtToken.Payload[v]))
 			}
 		}
 	}
 	if jwtPlugin.opaUrl != "" {
 		if err := jwtPlugin.CheckOpa(request, jwtToken); err != nil {
+			jsonLogEvent, _ := json.Marshal(&LogEvent{
+				Level:   "error",
+				Msg:     fmt.Sprintf("OPA Check failed - err: %s", err.Error()),
+				Time:    time.Now(),
+				Sub:     sub,
+				Network: network,
+				URL:     request.URL.String(),
+			})
+			fmt.Println(string(jsonLogEvent))
 			return err
 		}
 	}
@@ -359,6 +461,8 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 }
 
 func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
+	network := jwtPlugin.remoteAddr(request)
+
 	authHeader, ok := request.Header["Authorization"]
 	if !ok {
 		return nil, nil
@@ -369,6 +473,15 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	}
 	parts := strings.Split(auth[7:], ".")
 	if len(parts) != 3 {
+		jsonLogEvent, _ := json.Marshal(&LogEvent{
+			Level:   "error",
+			Msg:     fmt.Sprint("Invalid token format"),
+			Time:    time.Now(),
+			Sub:     "",
+			Network: network,
+			URL:     request.URL.String(),
+		})
+		fmt.Println(string(jsonLogEvent))
 		return nil, fmt.Errorf("invalid token format")
 	}
 	header, err := base64.RawURLEncoding.DecodeString(parts[0])

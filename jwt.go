@@ -377,21 +377,6 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 	if err != nil {
 		return err
 	}
-
-	// JWT token required
-	if jwtToken == nil && (len(jwtPlugin.keys) > 0 || len(jwtPlugin.jwkEndpoints) > 0) {
-		jsonLogEvent, _ := json.Marshal(&LogEvent{
-			Level:   "error",
-			Msg:     fmt.Sprintf("Missing JWT while keys are configured (#keys: %d, #jwkEndpoints: %d)", len(jwtPlugin.keys), len(jwtPlugin.jwkEndpoints)),
-			Time:    time.Now(),
-			Sub:     sub,
-			Network: network,
-			URL:     request.URL.String(),
-		})
-		fmt.Println(string(jsonLogEvent))
-		return fmt.Errorf("Authorization header with JWT Token is required (Authorization: Bearer <JWT>) !!!")
-	}
-
 	if jwtToken != nil {
 		sub = fmt.Sprint(jwtToken.Payload["sub"])
 

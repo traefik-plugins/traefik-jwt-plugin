@@ -230,7 +230,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 			// TODO: log warning
 			jsonLogEvent, _ := json.Marshal(&LogEvent{
 				Level: "warning",
-				Msg:   fmt.Sprintf("FetchKeys - Failed to fetch keys"),
+				Msg:   "FetchKeys - Failed to fetch keys",
 				Time:  time.Now(),
 				Sub:   "",
 				URL:   u.String(),
@@ -243,7 +243,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 			// TODO: log warning
 			jsonLogEvent, _ := json.Marshal(&LogEvent{
 				Level: "warning",
-				Msg:   fmt.Sprintf("FetchKeys - Failed to read keys"),
+				Msg:   "FetchKeys - Failed to read keys",
 				Time:  time.Now(),
 				Sub:   "",
 				URL:   u.String(),
@@ -257,7 +257,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 			// TODO: log warning
 			jsonLogEvent, _ := json.Marshal(&LogEvent{
 				Level: "warning",
-				Msg:   fmt.Sprintf("FetchKeys - Failed to unmarshall jwksKeys"),
+				Msg:   "FetchKeys - Failed to unmarshall jwksKeys",
 				Time:  time.Now(),
 				Sub:   "",
 				URL:   u.String(),
@@ -460,7 +460,7 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	if len(parts) != 3 {
 		jsonLogEvent, _ := json.Marshal(&LogEvent{
 			Level:   "error",
-			Msg:     fmt.Sprint("Invalid token format"),
+			Msg:     "Invalid token format",
 			Time:    time.Now(),
 			Sub:     "",
 			Network: network,

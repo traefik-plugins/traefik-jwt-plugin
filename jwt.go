@@ -669,5 +669,11 @@ func verifyECDSA(key interface{}, _ crypto.Hash, digest []byte, signature []byte
 // as specified in https://tools.ietf.org/html/rfc7638.
 func JWKThumbprint(jwk string) (string, error) {
 	b := sha256.Sum256([]byte(jwk))
-	return base64.RawURLEncoding.EncodeToString(b[:]), nil
+	var slice []byte
+	if len(b) > 0 {
+		for _, s := range b {
+			slice = append(slice, s)
+		}
+	}
+	return base64.RawURLEncoding.EncodeToString(slice), nil
 }

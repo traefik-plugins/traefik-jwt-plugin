@@ -24,7 +24,6 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -40,7 +39,6 @@ type Config struct {
 	Aud           string
 	OpaHeaders    map[string]string
 	JwtHeaders    map[string]string
-	ExpiryCheck   bool
 }
 
 // CreateConfig creates a new OPA Config
@@ -62,7 +60,6 @@ type JwtPlugin struct {
 	aud           string
 	opaHeaders    map[string]string
 	jwtHeaders    map[string]string
-	mu            sync.Mutex
 }
 
 // LogEvent contains a single log entry
@@ -176,9 +173,7 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 
 func (jwtPlugin *JwtPlugin) BackgroundRefresh() {
 	for {
-		jwtPlugin.mu.Lock()
 		jwtPlugin.FetchKeys()
-		jwtPlugin.mu.Unlock()
 		time.Sleep(15 * time.Minute) // 15 min
 	}
 }

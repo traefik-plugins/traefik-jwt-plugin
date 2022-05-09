@@ -1,4 +1,4 @@
-package traefik_jwt_plugin_test
+package traefik_jwt_plugin
 
 import (
 	"bytes"
@@ -13,8 +13,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	traefik_jwt_plugin "github.com/team-carepay/traefik-jwt-plugin"
 )
 
 func TestServeHTTPOK(t *testing.T) {
@@ -67,7 +65,7 @@ func TestServeHTTPOK(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := traefik_jwt_plugin.CreateConfig()
+			cfg := Config{}
 			cfg.PayloadFields = []string{"exp"}
 			cfg.JwtHeaders = map[string]string{"Name": "name"}
 			cfg.Keys = []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"}
@@ -75,7 +73,7 @@ func TestServeHTTPOK(t *testing.T) {
 			nextCalled := false
 			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
 
-			jwt, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+			jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -156,7 +154,7 @@ func TestServeOPAWithBody(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				var input traefik_jwt_plugin.Payload
+				var input Payload
 				err := json.NewDecoder(r.Body).Decode(&input)
 				if err != nil {
 					t.Fatal(err)
@@ -171,7 +169,7 @@ func TestServeOPAWithBody(t *testing.T) {
 				_, _ = fmt.Fprintln(w, `{ "result": { "allow": true, "foo": "Bar" } }`)
 			}))
 			defer ts.Close()
-			cfg := traefik_jwt_plugin.CreateConfig()
+			cfg := Config{}
 			cfg.OpaUrl = fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL)
 			cfg.OpaAllowField = "allow"
 			ctx := context.Background()
@@ -185,7 +183,7 @@ func TestServeOPAWithBody(t *testing.T) {
 				}
 			})
 
-			jwt, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+			jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -209,7 +207,7 @@ func TestServeOPAWithBody(t *testing.T) {
 
 func TestServeWithBody(t *testing.T) {
 	// TODO: add more testcases with DSA, etc.
-	cfg := traefik_jwt_plugin.CreateConfig()
+	cfg := Config{}
 	cfg.PayloadFields = []string{"exp"}
 	cfg.JwtHeaders = map[string]string{"Name": "name"}
 	cfg.Keys = []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"}
@@ -224,7 +222,7 @@ func TestServeWithBody(t *testing.T) {
 		nextCalled = true
 	})
 
-	jwt, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,14 +250,14 @@ func TestServeWithBody(t *testing.T) {
 }
 
 func TestServeHTTPInvalidSignature(t *testing.T) {
-	cfg := traefik_jwt_plugin.CreateConfig()
+	cfg := Config{}
 	cfg.PayloadFields = []string{"exp"}
 	cfg.Keys = []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"}
 	ctx := context.Background()
 	nextCalled := false
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
 
-	jwt, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -280,7 +278,7 @@ func TestServeHTTPInvalidSignature(t *testing.T) {
 }
 
 func TestServeHTTPMissingExp(t *testing.T) {
-	cfg := traefik_jwt_plugin.CreateConfig()
+	cfg := Config{}
 	cfg.PayloadFields = []string{"exp"}
 	cfg.Required = true
 	cfg.Keys = []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"}
@@ -288,7 +286,7 @@ func TestServeHTTPMissingExp(t *testing.T) {
 	nextCalled := false
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
 
-	jwt, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,20 +315,20 @@ func TestServeHTTPAllowed(t *testing.T) {
 		if len(param1) != 2 || param1[0] != "foo" || param1[1] != "bar" {
 			t.Fatal(fmt.Sprintf("Parameters incorrect, expected foo,bar but got %s", strings.Join(param1, ",")))
 		}
-		var input traefik_jwt_plugin.Payload
+		var input Payload
 		_ = json.NewDecoder(r.Body).Decode(&input)
 		if input.Input.Parameters.Get("frodo") != "notpass" {
 			t.Fatal("Missing frodo")
 		}
 		bodyContent := input.Input.Body
-		if bodyContent["baggins"] != "shire" {
+		if fmt.Sprintf("%s", bodyContent["baggins"]) != "shire" {
 			t.Fatal("Input body payload incorrect")
 		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprintln(w, `{ "result": { "allow": true, "foo": "Bar" } }`)
 	}))
 	defer ts.Close()
-	cfg := traefik_jwt_plugin.CreateConfig()
+	cfg := Config{}
 	cfg.OpaUrl = fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL)
 	cfg.OpaAllowField = "allow"
 	cfg.OpaHeaders = map[string]string{"Foo": "foo"}
@@ -339,7 +337,7 @@ func TestServeHTTPAllowed(t *testing.T) {
 	nextCalled := false
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
 
-	opa, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+	opa, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,13 +369,13 @@ func TestServeHTTPForbidden(t *testing.T) {
 		_, _ = fmt.Fprintln(w, "{ \"result\": { \"allow\": false } }")
 	}))
 	defer ts.Close()
-	cfg := traefik_jwt_plugin.CreateConfig()
+	cfg := Config{}
 	cfg.OpaUrl = ts.URL
 	cfg.OpaAllowField = "allow"
 	ctx := context.Background()
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { t.Fatal("Should not chain HTTP call") })
 
-	opa, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+	opa, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,6 +430,13 @@ func TestNewJWKEndpoint(t *testing.T) {
 			status: http.StatusOK,
 			next:   true,
 		},
+		{
+			name:   "rsa-multiplekeys",
+			key:    `{"keys":[{"alg":"RS512","e":"AQAB","n":"nzyis1ZjfNB0bBgKFMSvvkTtwlvBsaJq7S5wA-kzeVOVpVWwkWdVha4s38XM_pa_yr47av7-z3VTmvDRyAHcaT92whREFpLv9cj5lTeJSibyr_Mrm_YtjCZVWgaOYIhwrXwKLqPr_11inWsAkfIytvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0e-lf4s4OxQawWD79J9_5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWbV6L11BWkpzGXSW4Hv43qa-GSYOD2QU68Mb59oSk2OB-BtOLpJofmbGEGgvmwyCI9Mw","kty":"RSA"},{ "alg":"PS384", "kty": "RSA", "n": "nzyis1ZjfNB0bBgKFMSvvkTtwlvBsaJq7S5wA-kzeVOVpVWwkWdVha4s38XM_pa_yr47av7-z3VTmvDRyAHcaT92whREFpLv9cj5lTeJSibyr_Mrm_YtjCZVWgaOYIhwrXwKLqPr_11inWsAkfIytvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0e-lf4s4OxQawWD79J9_5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWbV6L11BWkpzGXSW4Hv43qa-GSYOD2QU68Mb59oSk2OB-BtOLpJofmbGEGgvmwyCI9Mw", "e": "AQAB" }]}`,
+			token:  "Bearer eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A",
+			status: http.StatusOK,
+			next:   true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -440,13 +445,13 @@ func TestNewJWKEndpoint(t *testing.T) {
 				_, _ = fmt.Fprintln(w, tt.key)
 			}))
 			defer ts.Close()
-			cfg := traefik_jwt_plugin.CreateConfig()
+			cfg := Config{}
 			cfg.Keys = []string{ts.URL}
 			ctx := context.Background()
 			nextCalled := false
 			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
 
-			opa, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+			opa, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -473,7 +478,7 @@ func TestNewJWKEndpoint(t *testing.T) {
 }
 
 func TestIssue3(t *testing.T) {
-	cfg := traefik_jwt_plugin.CreateConfig()
+	cfg := Config{}
 	cfg.PayloadFields = []string{"exp"}
 	cfg.JwtHeaders = map[string]string{"Subject": "sub", "User": "preferred_username"}
 	cfg.Keys = []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"}
@@ -481,7 +486,7 @@ func TestIssue3(t *testing.T) {
 	nextCalled := false
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
 
-	jwt, err := traefik_jwt_plugin.New(ctx, next, cfg, "test-traefik-jwt-plugin")
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -504,5 +509,70 @@ func TestIssue3(t *testing.T) {
 	}
 	if v := req.Header.Get("User"); v != "user" {
 		t.Fatal("Expected header User:user")
+	}
+}
+
+func TestIssue13(t *testing.T) {
+	cfg := Config{}
+	cfg.PayloadFields = []string{"exp"}
+	cfg.JwtHeaders = map[string]string{"Subject": "sub", "User": "preferred_username"}
+	cfg.Keys = []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----", "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmDaxrT7mDmyGHZaBuwq6\nMimV2hUrOoZ86MT/dTpspnNL4DgvvUOjvkn7Oebg9kNmAxjfqDmHtqKdKvot/vZp\nJMPr/+s/haBDN3plDf3SeWOEWwFgVwkLnkOm+mCWEvhYL6bBGCcv9AwYYtyQONKg\n+2NFOVxtQVlGo1Z8xUIY4vELiUcqTjqBZPi3+CaxqWvGsh5Wg4Si84/xKx85Ah6f\nrAtPGGO8wG2Jqlw1R4ZHJmBgXtLXTeDI2zzxugI1BtcQfy5fd9PBVoEM6782km0R\nei3X8CqIMuv00O2juFh2rZxC9ENibTbdf2OueI+sbYoP1FsziruDHJRzKnm/oAVY\nDwIDAQAB\n-----END PUBLIC KEY-----"}
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTkyMTQ3MjIsImlhdCI6MTYxOTIxNDQyMiwianRpIjoiMDQxNDE4MTUtMjlmMy00OGVlLWI0ZGQtYTA0N2Q1NWU1MjcxIiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay50ZXN0LnNjdy5mcmVlcGhwNS5uZXQvYXV0aC9yZWFsbXMvdGVzdCIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiJjMDNhM2Q4YS1lMGI1LTQ3Y2EtOWIwZi1iMmY5ZTY5Y2YzNDgiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJ0ZXN0LWNsaWVudCIsInNlc3Npb25fc3RhdGUiOiJjMmU1MmFhYS0yOTVkLTRhOWItOGNmMS1iYmIyYzliZmVmMmEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vd2hvYW1pLnRlc3Quc2N3LmZyZWVwaHA1Lm5ldCJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJtYW5hZ2UtYWNjb3VudC1saW5rcyIsInZpZXctcHJvZmlsZSJdfX0sInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicHJlZmVycmVkX3VzZXJuYW1lIjoidXNlciJ9.UM_lD4nnS83CvNK6sryFTBK65_i7rzwYGNytupJB8TcXdmeIFL-a9mXcSrBA21Ch-lNO8cmVhqqRAoNzdm_DXxKn6Hq-OF3aPs-4aVUvMT1EuZx_QSWeaDf6qnxemhrUkTYmrHgmMKyUX6saeErKHTI_SXPncyctYkAaKAY8ibrM7vl9FOJC3LdKd7vAEIqwXwSN1m-aaTIVTvfhMBAlaULsiGQJW8lp0ktDtv2n3ta7zYv-Pl5bzyA7t5b1KRDUCrodZQjJfLOkwZUfNgJmHRrWBrEQg-D4CP9dr_9xTSHVFvOfWEboXOn1j2uJ0MgxikodYz2UT4qOYYhZyrB7zw"}
+
+	jwt.ServeHTTP(recorder, req)
+
+	if nextCalled == false {
+		t.Fatal("next.ServeHTTP was not called")
+	}
+	if v := req.Header.Get("Subject"); v != "c03a3d8a-e0b5-47ca-9b0f-b2f9e69cf348" {
+		t.Fatal("Expected header sub:c03a3d8a-e0b5-47ca-9b0f-b2f9e69cf348")
+	}
+	if v := req.Header.Get("User"); v != "user" {
+		t.Fatal("Expected header User:user")
+	}
+}
+
+func TestIssue15(t *testing.T) {
+	cfg := Config{}
+	cfg.JwtHeaders = map[string]string{"X-Subject": "sub"}
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTkyMTQ3MjIsImlhdCI6MTYxOTIxNDQyMiwianRpIjoiMDQxNDE4MTUtMjlmMy00OGVlLWI0ZGQtYTA0N2Q1NWU1MjcxIiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay50ZXN0LnNjdy5mcmVlcGhwNS5uZXQvYXV0aC9yZWFsbXMvdGVzdCIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiJjMDNhM2Q4YS1lMGI1LTQ3Y2EtOWIwZi1iMmY5ZTY5Y2YzNDgiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJ0ZXN0LWNsaWVudCIsInNlc3Npb25fc3RhdGUiOiJjMmU1MmFhYS0yOTVkLTRhOWItOGNmMS1iYmIyYzliZmVmMmEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vd2hvYW1pLnRlc3Quc2N3LmZyZWVwaHA1Lm5ldCJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJtYW5hZ2UtYWNjb3VudC1saW5rcyIsInZpZXctcHJvZmlsZSJdfX0sInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicHJlZmVycmVkX3VzZXJuYW1lIjoidXNlciJ9.UM_lD4nnS83CvNK6sryFTBK65_i7rzwYGNytupJB8TcXdmeIFL-a9mXcSrBA21Ch-lNO8cmVhqqRAoNzdm_DXxKn6Hq-OF3aPs-4aVUvMT1EuZx_QSWeaDf6qnxemhrUkTYmrHgmMKyUX6saeErKHTI_SXPncyctYkAaKAY8ibrM7vl9FOJC3LdKd7vAEIqwXwSN1m-aaTIVTvfhMBAlaULsiGQJW8lp0ktDtv2n3ta7zYv-Pl5bzyA7t5b1KRDUCrodZQjJfLOkwZUfNgJmHRrWBrEQg-D4CP9dr_9xTSHVFvOfWEboXOn1j2uJ0MgxikodYz2UT4qOYYhZyrB7zw"}
+
+	jwt.ServeHTTP(recorder, req)
+
+	if nextCalled == false {
+		t.Fatal("next.ServeHTTP was not called")
+	}
+	if v := req.Header.Get("X-Subject"); v != "c03a3d8a-e0b5-47ca-9b0f-b2f9e69cf348" {
+		t.Fatal("Expected header X-Subject: c03a3d8a-e0b5-47ca-9b0f-b2f9e69cf348")
 	}
 }

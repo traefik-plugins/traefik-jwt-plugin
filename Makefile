@@ -10,6 +10,9 @@ lint:
 test:
 	go test -v -cover ./...
 
+build:
+	go build -v .
+
 yaegi_test:
 	yaegi test -v .
 

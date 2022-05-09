@@ -45,4 +45,4 @@ jobs:
       run: curl -sfL https://raw.githubusercontent.com/traefik/yaegi/master/install.sh | bash -s -- -b $(go env GOPATH)/bin ${{ env.YAEGI_VERSION }}
 
     - name: Test with Yaegi
-      run: yaegi test -v .
+      run: ${{ github.workspace }}/go/bin/yaegi test -v .

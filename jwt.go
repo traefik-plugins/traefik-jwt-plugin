@@ -210,7 +210,7 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 }
 
 func (jwtPlugin *JwtPlugin) FetchKeys() {
-	logInfo("FetchKeys - #%d jwkEndpoints to fetch", len(jwtPlugin.jwkEndpoints)).
+	logInfo(fmt.Sprintf("FetchKeys - #%d jwkEndpoints to fetch", len(jwtPlugin.jwkEndpoints))).
 		print()
 	for _, u := range jwtPlugin.jwkEndpoints {
 		response, err := http.Get(u.String())
@@ -332,7 +332,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 		// only verify jwt tokens if keys are configured
 		if len(jwtPlugin.keys) > 0 || len(jwtPlugin.jwkEndpoints) > 0 {
 			if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
-				logError("Token is invalid - err: %s", err.Error()).
+				logError(fmt.Sprintf("Token is invalid - err: %s", err.Error())).
 					withSub(sub).
 					withUrl(request.URL.String()).
 					withNetwork(jwtPlugin.remoteAddr(request)).
@@ -343,14 +343,14 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 		for _, fieldName := range jwtPlugin.payloadFields {
 			if _, ok := jwtToken.Payload[fieldName]; !ok {
 				if jwtPlugin.required {
-					logError("Missing JWT field %s", fieldName).
+					logError(fmt.Sprintf("Missing JWT field %s", fieldName)).
 						withSub(sub).
 						withUrl(request.URL.String()).
 						withNetwork(jwtPlugin.remoteAddr(request)).
 						print()
 					return fmt.Errorf("payload missing required field %s", fieldName)
 				} else {
-					logWarn("Missing JWT field %s", fieldName).
+					logWarn(fmt.Sprintf("Missing JWT field %s", fieldName)).
 						withSub(sub).
 						withUrl(request.URL.String()).
 						withNetwork(jwtPlugin.remoteAddr(request)).
@@ -367,7 +367,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 	}
 	if jwtPlugin.opaUrl != "" {
 		if err := jwtPlugin.CheckOpa(request, jwtToken); err != nil {
-			logError("OPA Check failed - err: %s", err.Error()).
+			logError(fmt.Sprintf("OPA Check failed - err: %s", err.Error())).
 				withSub(sub).
 				withUrl(request.URL.String()).
 				withNetwork(jwtPlugin.remoteAddr(request)).
@@ -702,24 +702,22 @@ func JWKThumbprint(jwk string) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(slice), nil
 }
 
-func logInfo(fmtString string, args ...interface{}) *LogEvent {
-	return newLogEvent("INFO", fmtString, args...)
+func logInfo(msg string) *LogEvent {
+	return newLogEvent("info", msg)
 }
 
-func logWarn(fmtString string, args ...interface{}) *LogEvent {
-	return newLogEvent("WARN", fmtString, args...)
-
+func logWarn(msg string) *LogEvent {
+	return newLogEvent("warn", msg)
 }
 
-func logError(fmtString string, args ...interface{}) *LogEvent {
-	return newLogEvent("ERROR", fmtString, args...)
-
+func logError(msg string) *LogEvent {
+	return newLogEvent("error", msg)
 }
 
-func newLogEvent(level string, fmtTemplate string, args ...interface{}) *LogEvent {
+func newLogEvent(level string, msg string) *LogEvent {
 	return &LogEvent{
 		Level: level,
-		Msg:   fmt.Sprintf(fmtTemplate, args...),
+		Msg:   msg,
 	}
 }
 

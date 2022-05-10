@@ -25,7 +25,7 @@ experimental:
 
 additionalArguments:
 - --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin
-- --experimental.plugins.jwt.version=v0.0.5
+- --experimental.plugins.jwt.version=v0.0.11
 ```
 
 ### Installation via command line
@@ -33,7 +33,7 @@ additionalArguments:
 traefik \
   --experimental.pilot.token=xxxx-xxxx-xxx \
   --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin \
-  --experimental.plugins.jwt.version=v0.0.5
+  --experimental.plugins.jwt.version=v0.0.11
 ```
 
 ## Configuration
@@ -108,6 +108,9 @@ The plugin will translate the HTTP request (including headers and parameters) an
       "Accept-Encoding": [
         "gzip, deflate, br"
       ],
+      "Authorization": [
+        "Bearer XXX.XXX.XXX"
+      ],
       "X-Forwarded-Host": [
         "localhost"
       ],
@@ -137,7 +140,15 @@ The plugin will translate the HTTP request (including headers and parameters) an
     "path": [
       "api",
       "path"
-    ]
+    ],
+    "tokenHeader": {
+        "alg": "RS512",
+        "kid": "abc123"
+    },
+    "tokenPayload": {
+        "exp": 1652263686,
+        "sub": "johndoe@host.com"
+    }
   }
 ```
 

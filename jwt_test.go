@@ -549,7 +549,7 @@ func TestIssue13(t *testing.T) {
 
 func TestIssue15(t *testing.T) {
 	cfg := Config{}
-	cfg.JwtHeaders = map[string]string{"X-Subject": "sub"}
+	cfg.JwtHeaders = map[string]string{"X-Subject": "sub", "X-Exp": "exp", "X-Email-Verified": "email_verified"}
 	ctx := context.Background()
 	nextCalled := false
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
@@ -574,5 +574,11 @@ func TestIssue15(t *testing.T) {
 	}
 	if v := req.Header.Get("X-Subject"); v != "c03a3d8a-e0b5-47ca-9b0f-b2f9e69cf348" {
 		t.Fatal("Expected header X-Subject: c03a3d8a-e0b5-47ca-9b0f-b2f9e69cf348")
+	}
+	if v := req.Header.Get("X-Exp"); v != "1619214722" {
+		t.Fatal("Expected header X-Exp: 1619214722")
+	}
+	if v := req.Header.Get("X-Email-Verified"); v != "false" {
+		t.Fatal("Expected header X-Email-Verified: false")
 	}
 }

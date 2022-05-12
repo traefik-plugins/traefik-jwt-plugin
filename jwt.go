@@ -415,7 +415,9 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = json.Unmarshal(payload, &jwtToken.Payload)
+	d := json.NewDecoder(bytes.NewBuffer(payload))
+	d.UseNumber()
+	err = d.Decode(&jwtToken.Payload)
 	if err != nil {
 		return nil, err
 	}

@@ -326,45 +326,46 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 	if err != nil {
 		return err
 	}
-	sub := ""
-	if jwtToken != nil {
-		sub = fmt.Sprint(jwtToken.Payload["sub"])
-		// only verify jwt tokens if keys are configured
-		if len(jwtPlugin.keys) > 0 || len(jwtPlugin.jwkEndpoints) > 0 {
-			if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
-				logError(fmt.Sprintf("Token is invalid - err: %s", err.Error())).
+	if jwtToken == nil {
+		return fmt.Errorf("No token found")
+	}
+	sub := fmt.Sprint(jwtToken.Payload["sub"])
+	// only verify jwt tokens if keys are configured
+	if len(jwtPlugin.keys) > 0 || len(jwtPlugin.jwkEndpoints) > 0 {
+		if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
+			logError(fmt.Sprintf("Token is invalid - err: %s", err.Error())).
+				withSub(sub).
+				withUrl(request.URL.String()).
+				withNetwork(jwtPlugin.remoteAddr(request)).
+				print()
+			return err
+		}
+	}
+	for _, fieldName := range jwtPlugin.payloadFields {
+		if _, ok := jwtToken.Payload[fieldName]; !ok {
+			if jwtPlugin.required {
+				logError(fmt.Sprintf("Missing JWT field %s", fieldName)).
 					withSub(sub).
 					withUrl(request.URL.String()).
 					withNetwork(jwtPlugin.remoteAddr(request)).
 					print()
-				return err
-			}
-		}
-		for _, fieldName := range jwtPlugin.payloadFields {
-			if _, ok := jwtToken.Payload[fieldName]; !ok {
-				if jwtPlugin.required {
-					logError(fmt.Sprintf("Missing JWT field %s", fieldName)).
-						withSub(sub).
-						withUrl(request.URL.String()).
-						withNetwork(jwtPlugin.remoteAddr(request)).
-						print()
-					return fmt.Errorf("payload missing required field %s", fieldName)
-				} else {
-					logWarn(fmt.Sprintf("Missing JWT field %s", fieldName)).
-						withSub(sub).
-						withUrl(request.URL.String()).
-						withNetwork(jwtPlugin.remoteAddr(request)).
-						print()
-				}
-			}
-		}
-		for k, v := range jwtPlugin.jwtHeaders {
-			_, ok := jwtToken.Payload[v]
-			if ok {
-				request.Header.Add(k, fmt.Sprint(jwtToken.Payload[v]))
+				return fmt.Errorf("payload missing required field %s", fieldName)
+			} else {
+				logWarn(fmt.Sprintf("Missing JWT field %s", fieldName)).
+					withSub(sub).
+					withUrl(request.URL.String()).
+					withNetwork(jwtPlugin.remoteAddr(request)).
+					print()
 			}
 		}
 	}
+	for k, v := range jwtPlugin.jwtHeaders {
+		_, ok := jwtToken.Payload[v]
+		if ok {
+			request.Header.Add(k, fmt.Sprint(jwtToken.Payload[v]))
+		}
+	}
+
 	if jwtPlugin.opaUrl != "" {
 		if err := jwtPlugin.CheckOpa(request, jwtToken); err != nil {
 			logError(fmt.Sprintf("OPA Check failed - err: %s", err.Error())).
@@ -381,11 +382,11 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	authHeader, ok := request.Header["Authorization"]
 	if !ok {
-		return nil, nil
+		return nil, fmt.Errorf("Authorization header not found")
 	}
 	auth := authHeader[0]
 	if !strings.HasPrefix(auth, "Bearer ") {
-		return nil, nil
+		return nil, fmt.Errorf("Authorization header is not a Bearer token")
 	}
 	parts := strings.Split(auth[7:], ".")
 	if len(parts) != 3 {

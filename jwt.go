@@ -43,7 +43,9 @@ type Config struct {
 
 // CreateConfig creates a new OPA Config
 func CreateConfig() *Config {
-	return &Config{}
+	return &Config{
+		Required: true, // default to Authorization JWT header is required
+	}
 }
 
 // JwtPlugin contains the runtime config
@@ -323,8 +325,15 @@ func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Requ
 
 func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 	jwtToken, err := jwtPlugin.ExtractToken(request)
-	if err != nil {
-		return err
+	if jwtToken == nil {
+		if jwtPlugin.required {
+			return err
+		} else {
+			logWarn(err.Error()).
+				withUrl(request.URL.String()).
+				withNetwork(jwtPlugin.remoteAddr(request)).
+				print()
+		}
 	}
 	sub := ""
 	if jwtToken != nil {
@@ -381,11 +390,11 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	authHeader, ok := request.Header["Authorization"]
 	if !ok {
-		return nil, nil
+		return nil, fmt.Errorf("authorization header missing")
 	}
 	auth := authHeader[0]
 	if !strings.HasPrefix(auth, "Bearer ") {
-		return nil, nil
+		return nil, fmt.Errorf("authorization type not Bearer")
 	}
 	parts := strings.Split(auth[7:], ".")
 	if len(parts) != 3 {

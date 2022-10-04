@@ -313,11 +313,11 @@ func TestServeHTTPMissingExp(t *testing.T) {
 func TestServeHTTPAllowed(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/data/testok" {
-			t.Fatal(fmt.Sprintf("Path incorrect: %s", r.URL.Path))
+			t.Fatalf("Path incorrect: %s", r.URL.Path)
 		}
 		param1 := r.URL.Query()["Param1"]
 		if len(param1) != 2 || param1[0] != "foo" || param1[1] != "bar" {
-			t.Fatal(fmt.Sprintf("Parameters incorrect, expected foo,bar but got %s", strings.Join(param1, ",")))
+			t.Fatalf("Parameters incorrect, expected foo,bar but got %s", strings.Join(param1, ","))
 		}
 		var input Payload
 		_ = json.NewDecoder(r.Body).Decode(&input)

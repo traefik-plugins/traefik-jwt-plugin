@@ -15,7 +15,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/big"
 	"mime"
 	"mime/multipart"
@@ -220,7 +219,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 			logWarn("FetchKeys - Failed to fetch keys").withUrl(u.String()).print()
 			continue
 		}
-		body, err := ioutil.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
 		if err != nil {
 			logWarn("FetchKeys - Failed to read keys").withUrl(u.String()).print()
 			continue
@@ -508,7 +507,7 @@ func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
 	if err != nil {
 		return err
 	}
-	body, err := ioutil.ReadAll(authResponse.Body)
+	body, err := io.ReadAll(authResponse.Body)
 	if err != nil {
 		return err
 	}
@@ -586,7 +585,7 @@ func drainBody(b io.ReadCloser) ([]byte, io.ReadCloser, error) {
 		// No copying needed. Preserve the magic sentinel meaning of NoBody.
 		return nil, http.NoBody, nil
 	}
-	body, err := ioutil.ReadAll(b)
+	body, err := io.ReadAll(b)
 	if err != nil {
 		return nil, b, err
 	}

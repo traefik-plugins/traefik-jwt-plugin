@@ -351,20 +351,12 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 		}
 		for _, fieldName := range jwtPlugin.payloadFields {
 			if _, ok := jwtToken.Payload[fieldName]; !ok {
-				if jwtPlugin.required {
-					logError(fmt.Sprintf("Missing JWT field %s", fieldName)).
-						withSub(sub).
-						withUrl(request.URL.String()).
-						withNetwork(jwtPlugin.remoteAddr(request)).
-						print()
-					return fmt.Errorf("payload missing required field %s", fieldName)
-				} else {
-					logWarn(fmt.Sprintf("Missing JWT field %s", fieldName)).
-						withSub(sub).
-						withUrl(request.URL.String()).
-						withNetwork(jwtPlugin.remoteAddr(request)).
-						print()
-				}
+				logError(fmt.Sprintf("Missing JWT field %s", fieldName)).
+					withSub(sub).
+					withUrl(request.URL.String()).
+					withNetwork(jwtPlugin.remoteAddr(request)).
+					print()
+				return fmt.Errorf("payload missing required field %s", fieldName)
 			}
 		}
 		for k, v := range jwtPlugin.jwtHeaders {

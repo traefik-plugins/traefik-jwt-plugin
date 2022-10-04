@@ -43,7 +43,8 @@ type Config struct {
 // CreateConfig creates a new OPA Config
 func CreateConfig() *Config {
 	return &Config{
-		Required: true, // default to Authorization JWT header is required
+		Required:		true, // default to Authorization JWT header is required
+		OpaAllowField:	"allow",
 	}
 }
 
@@ -552,7 +553,7 @@ func toOPAPayload(request *http.Request) (*Payload, error) {
 		var save []byte
 		save, request.Body, err = drainBody(request.Body)
 		if err == nil {
-			if contentType == "application/json" {
+			if contentType == "application/json" && len(save) > 0 {
 				err = json.Unmarshal(save, &input.Body)
 				if err != nil {
 					return nil, err

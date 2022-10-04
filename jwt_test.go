@@ -250,6 +250,39 @@ func TestServeWithBody(t *testing.T) {
 	}
 }
 
+func TestServeGETWithContentType(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintln(w, `{ "result": { "allow": true } }`)
+	}))
+	defer ts.Close()
+	cfg := *CreateConfig()
+	cfg.Required = false
+	cfg.OpaUrl = ts.URL
+
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header["Content-Type"] = []string{"application/json"}
+
+	jwt.ServeHTTP(recorder, req)
+
+	if nextCalled == false {
+		t.Fatal("next.ServeHTTP was not called")
+	}
+}
 func TestServeHTTPInvalidSignature(t *testing.T) {
 	cfg := Config{
 		Required:      true,

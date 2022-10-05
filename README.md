@@ -44,7 +44,7 @@ Name | Description
 OpaUrl | URL for Open Policy Agent (e.g. http://opa:8181/v1/data/example) 
 OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not
 PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`). Multiple field names may be specificied (string array)
-Required | When true, in case the JWT payload is missing a field, the request will be forbidden
+Required | Is `Authorization` header with JWT token required for every request.
 Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.
 Alg | Used to verify which PKI algorithm is used in the JWT
 Iss | Used to verify the issuer of the JWT

@@ -15,7 +15,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/big"
 	"mime"
 	"mime/multipart"
@@ -44,7 +43,8 @@ type Config struct {
 // CreateConfig creates a new OPA Config
 func CreateConfig() *Config {
 	return &Config{
-		Required: true, // default to Authorization JWT header is required
+		Required:		true, // default to Authorization JWT header is required
+		OpaAllowField:	"allow",
 	}
 }
 
@@ -220,7 +220,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 			logWarn("FetchKeys - Failed to fetch keys").withUrl(u.String()).print()
 			continue
 		}
-		body, err := ioutil.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
 		if err != nil {
 			logWarn("FetchKeys - Failed to read keys").withUrl(u.String()).print()
 			continue
@@ -351,20 +351,12 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 		}
 		for _, fieldName := range jwtPlugin.payloadFields {
 			if _, ok := jwtToken.Payload[fieldName]; !ok {
-				if jwtPlugin.required {
-					logError(fmt.Sprintf("Missing JWT field %s", fieldName)).
-						withSub(sub).
-						withUrl(request.URL.String()).
-						withNetwork(jwtPlugin.remoteAddr(request)).
-						print()
-					return fmt.Errorf("payload missing required field %s", fieldName)
-				} else {
-					logWarn(fmt.Sprintf("Missing JWT field %s", fieldName)).
-						withSub(sub).
-						withUrl(request.URL.String()).
-						withNetwork(jwtPlugin.remoteAddr(request)).
-						print()
-				}
+				logError(fmt.Sprintf("Missing JWT field %s", fieldName)).
+					withSub(sub).
+					withUrl(request.URL.String()).
+					withNetwork(jwtPlugin.remoteAddr(request)).
+					print()
+				return fmt.Errorf("payload missing required field %s", fieldName)
 			}
 		}
 		for k, v := range jwtPlugin.jwtHeaders {
@@ -516,7 +508,7 @@ func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
 	if err != nil {
 		return err
 	}
-	body, err := ioutil.ReadAll(authResponse.Body)
+	body, err := io.ReadAll(authResponse.Body)
 	if err != nil {
 		return err
 	}
@@ -561,7 +553,7 @@ func toOPAPayload(request *http.Request) (*Payload, error) {
 		var save []byte
 		save, request.Body, err = drainBody(request.Body)
 		if err == nil {
-			if contentType == "application/json" {
+			if contentType == "application/json" && len(save) > 0 {
 				err = json.Unmarshal(save, &input.Body)
 				if err != nil {
 					return nil, err
@@ -594,7 +586,7 @@ func drainBody(b io.ReadCloser) ([]byte, io.ReadCloser, error) {
 		// No copying needed. Preserve the magic sentinel meaning of NoBody.
 		return nil, http.NoBody, nil
 	}
-	body, err := ioutil.ReadAll(b)
+	body, err := io.ReadAll(b)
 	if err != nil {
 		return nil, b, err
 	}

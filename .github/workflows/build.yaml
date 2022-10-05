@@ -19,7 +19,7 @@ jobs:
       with:
         go-version: ^${{ env.GO_VERSION }}
 
-    - name: Check out code 
+    - name: Check out code
       uses: actions/checkout@v3
 
     - name: Cache Go modules

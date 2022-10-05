@@ -633,42 +633,36 @@ func TestServeHTTPExpiration(t *testing.T) {
 	var tests = []struct {
 		Name   string `json:"sub"`
 		Fields []string
-		Iat    *int64 `json:"iat,omitempty"`
-		Exp    *int64 `json:"exp,omitempty"`
+		Claims string
 		err    string
 	}{
 		{
 			Name:   "valid",
 			Fields: []string{"exp", "iat"},
-			Iat:    &lastMinute,
-			Exp:    &nextMinute,
+			Claims: fmt.Sprintf(`{"exp": %d, "iat": %d}`, nextMinute, lastMinute),
 			err:    "",
 		},
 		{
-			Name: "no expiration",
-			Iat:  nil,
-			Exp:  nil,
-			err:  "",
+			Name:   "no expiration",
+			Claims: "{}",
+			err:    "",
 		},
 		{
 			Name:   "valid - exp only",
 			Fields: []string{"exp"},
-			Iat:    nil,
-			Exp:    &nextMinute,
+			Claims: fmt.Sprintf(`{"exp": %d}`, nextMinute),
 			err:    "",
 		},
 		{
 			Name:   "expired",
-			Fields: []string{"exp", "iat"},
-			Iat:    nil,
-			Exp:    &lastMinute,
+			Fields: []string{"exp"},
+			Claims: fmt.Sprintf(`{"exp": %d}`, lastMinute),
 			err:    "token is expired",
 		},
 		{
 			Name:   "not yet valid",
 			Fields: []string{"exp", "iat"},
-			Iat:    &nextMinute,
-			Exp:    &nextMinute,
+			Claims: fmt.Sprintf(`{"exp": %d, "iat": %d}`, nextMinute, nextMinute),
 			err:    "token not valid yet",
 		},
 	}
@@ -690,12 +684,8 @@ func TestServeHTTPExpiration(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			jsonBytes, err := json.Marshal(tt)
-			if err != nil {
-				t.Fatal(err)
-			}
 
-			req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9." + base64.RawURLEncoding.EncodeToString(jsonBytes) + ".JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A"}
+			req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9." + base64.RawURLEncoding.EncodeToString([]byte(tt.Claims)) + ".JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A"}
 
 			jwt.ServeHTTP(recorder, req)
 

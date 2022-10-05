@@ -350,7 +350,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 			}
 		}
 		for _, fieldName := range jwtPlugin.payloadFields {
-			value, ok := jwtToken.Payload[fieldName]
+			_, ok := jwtToken.Payload[fieldName]
 			if !ok {
 				logError(fmt.Sprintf("Missing JWT field %s", fieldName)).
 					withSub(sub).
@@ -360,7 +360,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 				return fmt.Errorf("payload missing required field %s", fieldName)
 			}
 			if fieldName == "exp" {
-				if expInt, err := strconv.ParseInt(fmt.Sprint(value), 10, 64); err != nil || expInt < time.Now().Unix() {
+				if expInt, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["exp"]), 10, 64); err != nil || expInt < time.Now().Unix() {
 					logError("Token is expired").
 						withSub(sub).
 						withUrl(request.URL.String()).
@@ -369,8 +369,8 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 					return fmt.Errorf("token is expired")
 				}
 			} else if fieldName == "iat" {
-				if expIat, err := strconv.ParseInt(fmt.Sprint(value), 10, 64); err != nil || expIat > time.Now().Unix() {
-					logError("Token is expired").
+				if expIat, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["iat"]), 10, 64); err != nil || expIat > time.Now().Unix() {
+					logError("Token not valid yet").
 						withSub(sub).
 						withUrl(request.URL.String()).
 						withNetwork(jwtPlugin.remoteAddr(request)).

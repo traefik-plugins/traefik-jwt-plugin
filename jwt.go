@@ -43,8 +43,8 @@ type Config struct {
 // CreateConfig creates a new OPA Config
 func CreateConfig() *Config {
 	return &Config{
-		Required:		true, // default to Authorization JWT header is required
-		OpaAllowField:	"allow",
+		Required:      true, // default to Authorization JWT header is required
+		OpaAllowField: "allow",
 	}
 }
 
@@ -350,13 +350,33 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 			}
 		}
 		for _, fieldName := range jwtPlugin.payloadFields {
-			if _, ok := jwtToken.Payload[fieldName]; !ok {
+			value, ok := jwtToken.Payload[fieldName]
+			if !ok {
 				logError(fmt.Sprintf("Missing JWT field %s", fieldName)).
 					withSub(sub).
 					withUrl(request.URL.String()).
 					withNetwork(jwtPlugin.remoteAddr(request)).
 					print()
 				return fmt.Errorf("payload missing required field %s", fieldName)
+			}
+			if fieldName == "exp" {
+				if expInt, err := value.(json.Number).Int64(); err != nil || expInt < time.Now().Unix() {
+					logError("Token is expired").
+						withSub(sub).
+						withUrl(request.URL.String()).
+						withNetwork(jwtPlugin.remoteAddr(request)).
+						print()
+					return fmt.Errorf("token is expired")
+				}
+			} else if fieldName == "iat" {
+				if expIat, err := value.(json.Number).Int64(); err != nil || expIat > time.Now().Unix() {
+					logError("Token is expired").
+						withSub(sub).
+						withUrl(request.URL.String()).
+						withNetwork(jwtPlugin.remoteAddr(request)).
+						print()
+					return fmt.Errorf("token not valid yet")
+				}
 			}
 		}
 		for k, v := range jwtPlugin.jwtHeaders {

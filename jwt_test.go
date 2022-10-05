@@ -3,6 +3,7 @@ package traefik_jwt_plugin
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -66,8 +67,8 @@ func TestServeHTTPOK(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := Config{
-				JwtHeaders:    map[string]string{"Name": "name"},
-				Keys:          []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"},
+				JwtHeaders: map[string]string{"Name": "name"},
+				Keys:       []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"},
 			}
 			ctx := context.Background()
 			nextCalled := false
@@ -209,8 +210,8 @@ func TestServeOPAWithBody(t *testing.T) {
 func TestServeWithBody(t *testing.T) {
 	// TODO: add more testcases with DSA, etc.
 	cfg := Config{
-		JwtHeaders:    map[string]string{"Name": "name"},
-		Keys:          []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"},
+		JwtHeaders: map[string]string{"Name": "name"},
+		Keys:       []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"},
 	}
 	ctx := context.Background()
 	nextCalled := false
@@ -625,5 +626,90 @@ func TestIssue15(t *testing.T) {
 	}
 	if v := req.Header.Get("X-Email-Verified"); v != "false" {
 		t.Fatal("Expected header X-Email-Verified: false")
+	}
+}
+
+func TestServeHTTPExpiration(t *testing.T) {
+	lastMinute := time.Now().Add(-1 * time.Minute).Unix()
+	nextMinute := time.Now().Add(1 * time.Minute).Unix()
+	var tests = []struct {
+		Name   string `json:"sub"`
+		Fields []string
+		Iat    *int64 `json:"iat,omitempty"`
+		Exp    *int64 `json:"exp,omitempty"`
+		err    string
+	}{
+		{
+			Name:   "valid",
+			Fields: []string{"exp", "iat"},
+			Iat:    &lastMinute,
+			Exp:    &nextMinute,
+			err:    "",
+		},
+		{
+			Name: "no expiration",
+			Iat:  nil,
+			Exp:  nil,
+			err:  "",
+		},
+		{
+			Name:   "valid - exp only",
+			Fields: []string{"exp"},
+			Iat:    nil,
+			Exp:    &nextMinute,
+			err:    "",
+		},
+		{
+			Name:   "expired",
+			Fields: []string{"exp", "iat"},
+			Iat:    nil,
+			Exp:    &lastMinute,
+			err:    "token is expired",
+		},
+		{
+			Name:   "not yet valid",
+			Fields: []string{"exp", "iat"},
+			Iat:    &nextMinute,
+			Exp:    &nextMinute,
+			err:    "token not valid yet",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.Name, func(t *testing.T) {
+			ctx := context.Background()
+			nextCalled := false
+			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+			jwt, err := New(ctx, next, &Config{PayloadFields: tt.Fields}, "test-traefik-jwt-plugin")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			recorder := httptest.NewRecorder()
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			jsonBytes, err := json.Marshal(tt)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9." + base64.RawURLEncoding.EncodeToString(jsonBytes) + ".JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A"}
+
+			jwt.ServeHTTP(recorder, req)
+
+			if tt.err == "" && nextCalled == false {
+				t.Fatal("next.ServeHTTP was not called")
+			} else if tt.err != "" {
+				if nextCalled == true {
+					t.Fatal("next.ServeHTTP was called")
+				} else if tt.err != strings.TrimSpace(recorder.Body.String()) {
+					t.Fatalf("Expected error: %s, got: %s", tt.err, recorder.Body.String())
+				}
+			}
+		})
 	}
 }

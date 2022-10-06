@@ -111,13 +111,16 @@ func TestServeOPAWithBody(t *testing.T) {
 		method         string
 		contentType    string
 		body           string
+		allowed        bool
 		expectedBody   map[string]interface{}
 		expectedForm   url.Values
 		expectedStatus int
+		drainBody      bool
 	}{
 		{
 			name:           "get",
 			method:         "GET",
+			allowed:        true,
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -125,31 +128,47 @@ func TestServeOPAWithBody(t *testing.T) {
 			method:      "POST",
 			contentType: "application/json",
 			body:        `{ "killroy": "washere" }`,
+			allowed:     true,
 			expectedBody: map[string]interface{}{
 				"killroy": "washere",
 			},
 			expectedStatus: http.StatusOK,
+			drainBody:      true,
+		},
+		{
+			name:           "nobody",
+			method:         "POST",
+			contentType:    "application/json",
+			body:           `{ "killroy": "washere" }`,
+			allowed:        true,
+			expectedBody:   nil,
+			expectedStatus: http.StatusOK,
+			drainBody:      false,
 		},
 		{
 			name:        "form",
 			method:      "POST",
 			contentType: "application/x-www-url-formencoded",
 			body:        `foo=bar&bar=foo`,
+			allowed:     true,
 			expectedForm: map[string][]string{
 				"foo": {"bar"},
 				"bar": {"foo"},
 			},
 			expectedStatus: http.StatusOK,
+			drainBody:      true,
 		},
 		{
 			name:        "multipart",
 			method:      "POST",
 			contentType: "multipart/form-data; boundary=----boundary",
 			body:        "------boundary\nContent-Disposition: form-data; name=\"field1\"\n\nblabla\n------boundary--",
+			allowed:     true,
 			expectedForm: map[string][]string{
 				"field1": {"blabla"},
 			},
 			expectedStatus: http.StatusOK,
+			drainBody:      true,
 		},
 	}
 	for _, tt := range tests {
@@ -167,12 +186,13 @@ func TestServeOPAWithBody(t *testing.T) {
 					t.Fatalf("Expected %v, got %v", tt.expectedForm, input.Input.Form)
 				}
 				w.WriteHeader(http.StatusOK)
-				_, _ = fmt.Fprintln(w, `{ "result": { "allow": true, "foo": "Bar" } }`)
+				_, _ = fmt.Fprintf(w, `{ "result": { "allow": %t, "foo": "Bar" } }`, tt.allowed)
 			}))
 			defer ts.Close()
 			cfg := Config{
 				OpaUrl:        fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL),
 				OpaAllowField: "allow",
+				OpaBody:       tt.drainBody,
 			}
 			ctx := context.Background()
 			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
@@ -371,6 +391,7 @@ func TestServeHTTPAllowed(t *testing.T) {
 		OpaUrl:        fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL),
 		OpaAllowField: "allow",
 		OpaHeaders:    map[string]string{"Foo": "foo"},
+		OpaBody:       true,
 	}
 
 	ctx := context.Background()
@@ -638,8 +659,8 @@ func TestServeHTTPExpiration(t *testing.T) {
 	}{
 		{
 			Name:   "valid",
-			Fields: []string{"exp", "iat"},
-			Claims: fmt.Sprintf(`{"exp": %d, "iat": %d}`, nextMinute, lastMinute),
+			Fields: []string{"exp", "nbf"},
+			Claims: fmt.Sprintf(`{"exp": %d, "nbf": %d}`, nextMinute, lastMinute),
 			err:    "",
 		},
 		{
@@ -661,8 +682,8 @@ func TestServeHTTPExpiration(t *testing.T) {
 		},
 		{
 			Name:   "not yet valid",
-			Fields: []string{"exp", "iat"},
-			Claims: fmt.Sprintf(`{"exp": %d, "iat": %d}`, nextMinute, nextMinute),
+			Fields: []string{"exp", "nbf"},
+			Claims: fmt.Sprintf(`{"exp": %d, "nbf": %d}`, nextMinute, nextMinute),
 			err:    "token not valid yet",
 		},
 	}

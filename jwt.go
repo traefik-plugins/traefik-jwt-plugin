@@ -372,7 +372,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 					return fmt.Errorf("token is expired")
 				}
 			} else if fieldName == "nbf" {
-				if nbfInt, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["nbf"]), 10, 64); err != nil || nbfInt > time.Now().Add(-1*time.Minute).Unix() {
+				if nbfInt, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["nbf"]), 10, 64); err != nil || nbfInt > time.Now().Add(1*time.Minute).Unix() {
 					logError("Token not valid yet").
 						withSub(sub).
 						withUrl(request.URL.String()).

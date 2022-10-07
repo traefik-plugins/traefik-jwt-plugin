@@ -650,7 +650,7 @@ func TestIssue15(t *testing.T) {
 
 func TestServeHTTPExpiration(t *testing.T) {
 	lastMinute := time.Now().Add(-1 * time.Minute).Unix()
-	nextMinute := time.Now().Add(1 * time.Minute).Unix()
+	nextMinute := time.Now().Add(2 * time.Minute).Unix()
 	var tests = []struct {
 		Name   string `json:"sub"`
 		Fields []string

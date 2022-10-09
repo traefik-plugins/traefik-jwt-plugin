@@ -43,6 +43,7 @@ Name | Description
 --- | ---
 OpaUrl | URL for Open Policy Agent (e.g. http://opa:8181/v1/data/example) 
 OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not
+OpaBody | Boolean indicating whether the request body should be added to the OPA input
 PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`). Multiple field names may be specificied (string array)
 Required | Is `Authorization` header with JWT token required for every request.
 Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.
@@ -64,6 +65,7 @@ spec:
     jwt:
       OpaUrl: http://localhost:8181/v1/data/example
       OpaAllowField: allow
+      OpaBody: true
       PayloadFields:
         - exp
       Required: true
@@ -128,7 +130,7 @@ The plugin will translate the HTTP request (including headers and parameters) an
       ]
     },
     "host": "localhost",
-    "method": "GET",
+    "method": "POST",
     "parameters": {
       "param1": [
         "foo"
@@ -136,6 +138,9 @@ The plugin will translate the HTTP request (including headers and parameters) an
       "param2": [
         "bar"
       ]
+    },
+    "body: {
+      "foo": "bar"
     },
     "path": [
       "api",

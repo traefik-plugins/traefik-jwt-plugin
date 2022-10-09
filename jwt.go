@@ -38,6 +38,7 @@ type Config struct {
 	Aud           string
 	OpaHeaders    map[string]string
 	JwtHeaders    map[string]string
+	OpaBody       bool
 }
 
 // CreateConfig creates a new OPA Config
@@ -53,6 +54,7 @@ type JwtPlugin struct {
 	next          http.Handler
 	opaUrl        string
 	opaAllowField string
+	opaBody       bool
 	payloadFields []string
 	required      bool
 	jwkEndpoints  []*url.URL
@@ -157,6 +159,7 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 		next:          next,
 		opaUrl:        config.OpaUrl,
 		opaAllowField: config.OpaAllowField,
+		opaBody:       config.OpaBody,
 		payloadFields: config.PayloadFields,
 		required:      config.Required,
 		alg:           config.Alg,
@@ -368,8 +371,8 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 						print()
 					return fmt.Errorf("token is expired")
 				}
-			} else if fieldName == "iat" {
-				if expIat, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["iat"]), 10, 64); err != nil || expIat > time.Now().Unix() {
+			} else if fieldName == "nbf" {
+				if nbfInt, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["nbf"]), 10, 64); err != nil || nbfInt > time.Now().Add(1*time.Minute).Unix() {
 					logError("Token not valid yet").
 						withSub(sub).
 						withUrl(request.URL.String()).
@@ -512,7 +515,7 @@ func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
 }
 
 func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
-	opaPayload, err := toOPAPayload(request)
+	opaPayload, err := toOPAPayload(request, jwtPlugin.opaBody)
 	if err != nil {
 		return err
 	}
@@ -560,7 +563,7 @@ func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
 	return nil
 }
 
-func toOPAPayload(request *http.Request) (*Payload, error) {
+func toOPAPayload(request *http.Request, includeBody bool) (*Payload, error) {
 	input := &PayloadInput{
 		Host:       request.Host,
 		Method:     request.Method,
@@ -569,7 +572,7 @@ func toOPAPayload(request *http.Request) (*Payload, error) {
 		Headers:    request.Header,
 	}
 	contentType, params, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
-	if err == nil {
+	if err == nil && includeBody {
 		var save []byte
 		save, request.Body, err = drainBody(request.Body)
 		if err == nil {

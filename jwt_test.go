@@ -722,3 +722,32 @@ func TestServeHTTPExpiration(t *testing.T) {
 		})
 	}
 }
+
+func TestServeHTTPWithCookie(t *testing.T) {
+	cfg := Config{
+		Keys: []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAov9nZ9aU6fn7xwK/ytCu\nxGx70UCY1SMgN+4+f27xwK/ihmflfi4NxC+j9QV0CgRgnnRQ8FCI69ny8RqBwTci\nXYAIhm/sN2wWRYnRdeKZwt2NB/q1aA6fm7uj2GAdHNLQ713J0UCFZEL4Ofc84bfK\nu+7ghnxTOew3PzXc/R79pNaM8NP+3T6Qe0p19pmIG086vf7ieWUXs3dUMSeWHI0x\nVj05WXbxOE7rLx9V1xeYwGOYD4h/zn+DsaeHcFR5Zv36Rvx7LOQ8S4eYqMnCTa7H\nN9G5bpq57OdDw8GPIL7ECMZXOAI/x6L3UVYSBg0hTBgQRn054RM6Hp3jiz9Dlsn8\niQIDAQAB\n-----END PUBLIC KEY-----"},
+	}
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	req.AddCookie(&http.Cookie{Name: "jwt", Value: "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.TnHVsM5_N0SKi_HCwlz3ys1cDktu10g_sKkjqzVe5k09z-bmByflWPFWjAbwgRCKAc77kF8BjDNv0gisAPurBxgxNGxioDFehhcb0IS0YeCAWpzRfBMT6gQZ1gZeNM2Dg_yf4shPhF4rcUCGqnFFzIDSU9Rv2NNMK5DPO4512uTxAQUMHpi5PGTki-zykqTB10Ju1L4jRhmJwJDtGcfdHPlEKKUrFPfYl3RPZLOfdyAqSJ8Gi0R3ymDffmXHz08AJUAY_Kapk8laggIYcvFJhYGJBWZpcy7NWMiOIjEI3bogki4o7z0-Z1xMZdZ9rqypQ1MB44F8VZS2KkPfEmhSog"})
+
+	jwt.ServeHTTP(recorder, req)
+
+	if nextCalled == false {
+		t.Fatal("next.ServeHTTP was not called")
+	}
+}

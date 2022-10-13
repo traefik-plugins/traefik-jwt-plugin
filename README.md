@@ -1,21 +1,27 @@
 
 
 # traefik-jwt-plugin ![Build](https://github.com/team-carepay/traefik-jwt-plugin/workflows/build/badge.svg)
+
 Traefik plugin for verifying JSON Web Tokens (JWT). Supports public keys, certificates or JWKS endpoints.
 Supports RSA, ECDSA and symmetric keys. Supports Open Policy Agent (OPA) for additional authorization checks.
 
 Features:
+
 * RS256, RS384, RS512, PS256, PS384, PS512, ES256, ES384, ES512, HS256, HS384, HS512
-* Certificates or public keys can be configured in the dynamic config 
+* Certificates or public keys can be configured in the dynamic config
 * Supports JWK endpoints for fetching keys remotely
 * Reject a request or Log warning when required field is missing from JWT payload
 * Validate request with Open Policy Agent
 * Adds the verified and decoded token to the OPA input
 
 ## Installation
+
 The plugin needs to be configured in the Traefik static configuration before it can be used.
+
 ### Installation with Helm
+
 The following snippet can be used as an example for the values.yaml file:
+
 ```values.yaml
 pilot:
   enabled: true
@@ -31,7 +37,8 @@ additionalArguments:
 ```
 
 ### Installation via command line
-```
+
+```config
 traefik \
   --experimental.pilot.token=xxxx-xxxx-xxx \
   --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin \
@@ -39,6 +46,7 @@ traefik \
 ```
 
 ## Configuration
+
 The plugin currently supports the following configuration settings: (all fields are optional)
 
 Name | Description
@@ -56,10 +64,12 @@ JwtHeaders | Map used to inject JWT payload fields as HTTP request headers.
 OpaHeaders | Map used to inject OPA result fields as HTTP request headers. Populated if request is allowed by OPA. Only 1st level keys from OPA document are supported.
 OpaResponseHeaders | Map used to inject OPA result fields as HTTP response headers. Populated if OPA response has `OpaAllowField` present, regardless of value. Only 1st level keys from OPA document are supported.
 OpaHttpStatusField | Field in OPA JSON result, which contains int or string HTTP status code that will be returned in case of desiallowed OPA response. Accepted range is >= 300 and < 600. Only 1st level keys from OPA document are supported.
-
+JwtCookieKey | Name of the cookie to inject JWT (default `jwt`)
 
 ## Example configuration
+
 This example uses Kubernetes Custom Resource Descriptors (CRD) :
+
 ```yaml
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
@@ -105,10 +115,12 @@ metadata:
     traefik.ingress.kubernetes.io/router.middlewares: default-jwt@kubernetescrd
 ```
 
-# Open Policy Agent
+## Open Policy Agent
+
 The following section describes how to use this plugin with Open Policy Agent (OPA)
 
 ## OPA input payload
+
 The plugin will translate the HTTP request (including headers and parameters) and forwards the payload as JSON to OPA.
 For example, the following URL: `http://localhost/api/path?param1=foo&param2=bar` 
 will result in the following payload (headers are reduced for readability):
@@ -167,10 +179,12 @@ will result in the following payload (headers are reduced for readability):
 ```
 
 ## Example OPA policy in Rego
+
 The policies you enforce can be as complex or simple as you prefer. For example, the policy could decode the JWT token and verify the token is valid and has not expired, and that the user has the required claims in the token.
 
 The policy below shows an simplified example:
-```
+
+```config
 package example
 
 default allow = false
@@ -190,7 +204,9 @@ has_token(tokens) {
     input.path[1] = tokens[i]
 }
 ```
+
 In the above example, requesting `/public/anything` or `/secure/123` is allowed, however requesting `/secure/xxx` would be rejected and results in a 403 Forbidden.
 
 ## License
+
 This software is released under the Apache 2.0 License

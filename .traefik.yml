@@ -10,6 +10,7 @@ iconPath: jwt.png
 testData:
   OpaUrl: http://localhost:8181/v1/data/example
   OpaAllowField: allow
+  OpaBody: true
   PayloadFields:
     - exp
   Required: true
@@ -25,6 +26,9 @@ testData:
       MwIDAQAB
       -----END PUBLIC KEY-----
   OpaHeaders:
-    Allowed: allow
+    X-Allowed: allow
   JwtHeaders:
-    Subject: sub
+    X-Subject: sub
+  OpaResponseHeaders:
+    X-Allowed: allow
+  OpaHttpStatusField: allow_status_code

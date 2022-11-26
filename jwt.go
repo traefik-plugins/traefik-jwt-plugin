@@ -28,42 +28,47 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
-	OpaUrl        string
-	OpaAllowField string
-	PayloadFields []string
-	Required      bool
-	Keys          []string
-	Alg           string
-	Iss           string
-	Aud           string
-	OpaHeaders    map[string]string
-	JwtHeaders    map[string]string
-	OpaBody       bool
+	OpaUrl                string
+	OpaAllowField         string
+	OpaBody               bool
+	PayloadFields         []string
+	Required              bool
+	Keys                  []string
+	Alg                   string
+	Iss                   string
+	Aud                   string
+	OpaHeaders            map[string]string
+	JwtHeaders            map[string]string
+	OpaResponseHeaders    map[string]string
+	OpaHttpStatusField    string
 }
 
 // CreateConfig creates a new OPA Config
 func CreateConfig() *Config {
 	return &Config{
-		Required:      true, // default to Authorization JWT header is required
-		OpaAllowField: "allow",
+		Required:              true, // default to Authorization JWT header is required
+		OpaAllowField:         "allow",
+		OpaBody:               true,
 	}
 }
 
 // JwtPlugin contains the runtime config
 type JwtPlugin struct {
-	next          http.Handler
-	opaUrl        string
-	opaAllowField string
-	opaBody       bool
-	payloadFields []string
-	required      bool
-	jwkEndpoints  []*url.URL
-	keys          map[string]interface{}
-	alg           string
-	iss           string
-	aud           string
-	opaHeaders    map[string]string
-	jwtHeaders    map[string]string
+	next                  http.Handler
+	opaUrl                string
+	opaAllowField         string
+	opaBody               bool
+	payloadFields         []string
+	required              bool
+	jwkEndpoints          []*url.URL
+	keys                  map[string]interface{}
+	alg                   string
+	iss                   string
+	aud                   string
+	opaHeaders            map[string]string
+	jwtHeaders            map[string]string
+	opaResponseHeaders    map[string]string
+	opaHttpStatusField    string
 }
 
 // LogEvent contains a single log entry
@@ -156,18 +161,20 @@ type Response struct {
 // New creates a new plugin
 func New(_ context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
 	jwtPlugin := &JwtPlugin{
-		next:          next,
-		opaUrl:        config.OpaUrl,
-		opaAllowField: config.OpaAllowField,
-		opaBody:       config.OpaBody,
-		payloadFields: config.PayloadFields,
-		required:      config.Required,
-		alg:           config.Alg,
-		iss:           config.Iss,
-		aud:           config.Aud,
-		keys:          make(map[string]interface{}),
-		jwtHeaders:    config.JwtHeaders,
-		opaHeaders:    config.OpaHeaders,
+		next:                  next,
+		opaUrl:                config.OpaUrl,
+		opaAllowField:         config.OpaAllowField,
+		opaBody:               config.OpaBody,
+		payloadFields:         config.PayloadFields,
+		required:              config.Required,
+		alg:                   config.Alg,
+		iss:                   config.Iss,
+		aud:                   config.Aud,
+		keys:                  make(map[string]interface{}),
+		opaHeaders:            config.OpaHeaders,
+		jwtHeaders:            config.JwtHeaders,
+		opaResponseHeaders:    config.OpaResponseHeaders,
+		opaHttpStatusField:    config.OpaHttpStatusField,
 	}
 	if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
 		return nil, err
@@ -319,18 +326,22 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 }
 
 func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Request) {
-	if err := jwtPlugin.CheckToken(request); err != nil {
-		http.Error(rw, err.Error(), http.StatusForbidden)
+	if st, err := jwtPlugin.CheckToken(request, rw); err != nil {
+		if st >= 300 && st < 600  {
+			http.Error(rw, err.Error(), st)
+		} else {
+			http.Error(rw, err.Error(), http.StatusForbidden)
+		}
 		return
 	}
 	jwtPlugin.next.ServeHTTP(rw, request)
 }
 
-func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
+func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWriter) (int, error) {
 	jwtToken, err := jwtPlugin.ExtractToken(request)
 	if jwtToken == nil {
 		if jwtPlugin.required {
-			return err
+			return 0, err
 		} else {
 			logWarn(err.Error()).
 				withUrl(request.URL.String()).
@@ -349,7 +360,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 					withUrl(request.URL.String()).
 					withNetwork(jwtPlugin.remoteAddr(request)).
 					print()
-				return err
+				return 0, err
 			}
 		}
 		for _, fieldName := range jwtPlugin.payloadFields {
@@ -360,7 +371,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 					withUrl(request.URL.String()).
 					withNetwork(jwtPlugin.remoteAddr(request)).
 					print()
-				return fmt.Errorf("payload missing required field %s", fieldName)
+				return 0, fmt.Errorf("payload missing required field %s", fieldName)
 			}
 			if fieldName == "exp" {
 				if expInt, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["exp"]), 10, 64); err != nil || expInt < time.Now().Unix() {
@@ -369,7 +380,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 						withUrl(request.URL.String()).
 						withNetwork(jwtPlugin.remoteAddr(request)).
 						print()
-					return fmt.Errorf("token is expired")
+					return 0, fmt.Errorf("token is expired")
 				}
 			} else if fieldName == "nbf" {
 				if nbfInt, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["nbf"]), 10, 64); err != nil || nbfInt > time.Now().Add(1*time.Minute).Unix() {
@@ -378,7 +389,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 						withUrl(request.URL.String()).
 						withNetwork(jwtPlugin.remoteAddr(request)).
 						print()
-					return fmt.Errorf("token not valid yet")
+					return 0, fmt.Errorf("token not valid yet")
 				}
 			}
 		}
@@ -390,16 +401,16 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request) error {
 		}
 	}
 	if jwtPlugin.opaUrl != "" {
-		if err := jwtPlugin.CheckOpa(request, jwtToken); err != nil {
+		if st, err := jwtPlugin.CheckOpa(request, jwtToken, rw); err != nil {
 			logError(fmt.Sprintf("OPA Check failed - err: %s", err.Error())).
 				withSub(sub).
 				withUrl(request.URL.String()).
 				withNetwork(jwtPlugin.remoteAddr(request)).
 				print()
-			return err
+			return st, err
 		}
 	}
-	return nil
+	return 0, nil
 }
 
 func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
@@ -514,10 +525,10 @@ func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
 	}
 }
 
-func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
+func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT, rw http.ResponseWriter) (int, error) {
 	opaPayload, err := toOPAPayload(request, jwtPlugin.opaBody)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if token != nil {
 		opaPayload.Input.JWTHeader = token.Header
@@ -525,42 +536,63 @@ func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT) error {
 	}
 	authPayloadAsJSON, err := json.Marshal(opaPayload)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	authResponse, err := http.Post(jwtPlugin.opaUrl, "application/json", bytes.NewBuffer(authPayloadAsJSON))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	body, err := io.ReadAll(authResponse.Body)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	var result Response
 	err = json.Unmarshal(body, &result)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if len(result.Result) == 0 {
-		return fmt.Errorf("OPA result invalid")
+		return 0, fmt.Errorf("OPA result invalid")
 	}
 	fieldResult, ok := result.Result[jwtPlugin.opaAllowField]
 	if !ok {
-		return fmt.Errorf("OPA result missing: %v", jwtPlugin.opaAllowField)
+		return 0, fmt.Errorf("OPA result missing: %v", jwtPlugin.opaAllowField)
 	}
-	var allow bool
-	if err = json.Unmarshal(fieldResult, &allow); err != nil {
-		return err
-	}
-	if !allow {
-		return fmt.Errorf("%s", body)
-	}
-	for k, v := range jwtPlugin.opaHeaders {
+	for k, v := range jwtPlugin.opaResponseHeaders {
 		var value string
-		if err = json.Unmarshal(result.Result[v], &value); err == nil {
-			request.Header.Add(k, value) // add OPA result as an HTTP header
+		if rawVal, rawValOk := result.Result[v]; rawValOk {
+			if err = json.Unmarshal(rawVal, &value); err != nil {
+				value = string(rawVal)
+			}
+			rw.Header().Set(k, value)
 		}
 	}
-	return nil
+
+	var allow bool
+	if err = json.Unmarshal(fieldResult, &allow); err != nil {
+		return 0, err
+	}
+	if !allow {
+		if jwtPlugin.opaHttpStatusField != "" {
+			if rawVal, rawValOk := result.Result[jwtPlugin.opaHttpStatusField]; rawValOk {
+				if st, err := strconv.Atoi(strings.Trim(string(rawVal), `"`)); err == nil {
+					return st, fmt.Errorf("%s", body)
+				}
+			}
+		}
+		return 0, fmt.Errorf("%s", body)
+	}
+
+	for k, v := range jwtPlugin.opaHeaders {
+		var value string
+		if rawVal, rawValOk := result.Result[v]; rawValOk {
+			if err = json.Unmarshal(rawVal, &value); err != nil {
+				value = string(rawVal)
+			}
+			request.Header.Add(k, value)
+		}
+	}
+	return 0, nil
 }
 
 func toOPAPayload(request *http.Request, includeBody bool) (*Payload, error) {

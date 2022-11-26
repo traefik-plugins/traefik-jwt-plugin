@@ -41,21 +41,24 @@ The plugin currently supports the following configuration settings: (all fields 
 
 Name | Description
 --- | ---
-OpaUrl | URL for Open Policy Agent (e.g. http://opa:8181/v1/data/example) 
-OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not
-OpaBody | Boolean indicating whether the request body should be added to the OPA input
+OpaUrl | URL of OPA policy document requested for decision, e.g. http://opa:8181/v1/data/example.
+OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not.
+OpaBody | Boolean indicating whether the request body should be added to the OPA input.
 PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`). Multiple field names may be specificied (string array)
 Required | Is `Authorization` header with JWT token required for every request.
 Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.
-Alg | Used to verify which PKI algorithm is used in the JWT
-Iss | Used to verify the issuer of the JWT
-Aud | Used to verify the audience of the JWT
-JwtHeaders | Map used to inject JWT payload fields as an HTTP header
-OpaHeaders | Map used to inject OPA result fields as an HTTP header
+Alg | Used to verify which PKI algorithm is used in the JWT.
+Iss | Used to verify the issuer of the JWT.
+Aud | Used to verify the audience of the JWT.
+JwtHeaders | Map used to inject JWT payload fields as HTTP request headers.
+OpaHeaders | Map used to inject OPA result fields as HTTP request headers. Populated if request is allowed by OPA. Only 1st level keys from OPA document are supported.
+OpaResponseHeaders | Map used to inject OPA result fields as HTTP response headers. Populated if OPA response has `OpaAllowField` present, regardless of value. Only 1st level keys from OPA document are supported.
+OpaHttpStatusField | Field in OPA JSON result, which contains int or string HTTP status code that will be returned in case of desiallowed OPA response. Accepted range is >= 300 and < 600. Only 1st level keys from OPA document are supported.
+
 
 ## Example configuration
 This example uses Kubernetes Custom Resource Descriptors (CRD) :
-```
+```yaml
 apiVersion: traefik.containo.us/v1alpha1
 kind: Middleware
 metadata:
@@ -82,9 +85,12 @@ spec:
           MwIDAQAB
         -----END PUBLIC KEY-----
       OpaHeaders:
-        Allowed: allow
+        X-Allowed: allow
       JwtHeaders:
-        Subject: sub
+        X-Subject: sub
+      OpaResponseHeaders:
+        X-Allowed: allow
+      OpaHttpStatusField: allow_status_code
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -95,16 +101,17 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: traefik
     traefik.ingress.kubernetes.io/router.middlewares: default-jwt@kubernetescrd
-
 ```
 
 # Open Policy Agent
 The following section describes how to use this plugin with Open Policy Agent (OPA)
 
 ## OPA input payload
-The plugin will translate the HTTP request (including headers and parameters) and forwards the payload as JSON to OPA. For example, the following URL: `http://localhost/api/path?param1=foo&param2=bar` will result in the following payload (headers are reduced for readability):
+The plugin will translate the HTTP request (including headers and parameters) and forwards the payload as JSON to OPA.
+For example, the following URL: `http://localhost/api/path?param1=foo&param2=bar` 
+will result in the following payload (headers are reduced for readability):
 
-```
+```json
 {
     "headers": {
       "Accept-Encoding": [
@@ -167,13 +174,13 @@ package example
 default allow = false
 
 allow {
-	input.method = "GET"
-	input.path[0] = "public"
+    input.method = "GET"
+    input.path[0] = "public"
 }
 
 allow {
-	input.method = "GET"
-	input.path = [ "secure", i ]
+    input.method = "GET"
+    input.path = [ "secure", i ]
     has_token([ "123", "456"])
 }
 

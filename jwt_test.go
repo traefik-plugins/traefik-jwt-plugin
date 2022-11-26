@@ -220,8 +220,9 @@ func TestServeOPAWithBody(t *testing.T) {
 			req.Header["Content-Type"] = []string{tt.contentType}
 
 			jwt.ServeHTTP(recorder, req)
-			if recorder.Result().StatusCode != tt.expectedStatus {
-				t.Fatalf("Expected status %d, received %d", tt.expectedStatus, recorder.Result().StatusCode)
+			resp := recorder.Result()
+			if resp.StatusCode != tt.expectedStatus {
+				t.Fatalf("Expected status code %d, received %d", tt.expectedStatus, resp.StatusCode)
 			}
 		})
 	}
@@ -304,6 +305,7 @@ func TestServeGETWithContentType(t *testing.T) {
 		t.Fatal("next.ServeHTTP was not called")
 	}
 }
+
 func TestServeHTTPInvalidSignature(t *testing.T) {
 	cfg := Config{
 		Required:      true,
@@ -364,7 +366,7 @@ func TestServeHTTPMissingExp(t *testing.T) {
 	}
 }
 
-func TestServeHTTPAllowed(t *testing.T) {
+func TestServeHTTPAllowedByOPA(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/data/testok" {
 			t.Fatalf("Path incorrect: %s", r.URL.Path)
@@ -373,25 +375,17 @@ func TestServeHTTPAllowed(t *testing.T) {
 		if len(param1) != 2 || param1[0] != "foo" || param1[1] != "bar" {
 			t.Fatalf("Parameters incorrect, expected foo,bar but got %s", strings.Join(param1, ","))
 		}
-		var input Payload
-		_ = json.NewDecoder(r.Body).Decode(&input)
-		if input.Input.Parameters.Get("frodo") != "notpass" {
-			t.Fatal("Missing frodo")
-		}
-		bodyContent := input.Input.Body
-		if fmt.Sprintf("%s", bodyContent["baggins"]) != "shire" {
-			t.Fatal("Input body payload incorrect")
-		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprintln(w, `{ "result": { "allow": true, "foo": "Bar" } }`)
 	}))
 	defer ts.Close()
 	cfg := Config{
-		Required:      false,
-		OpaUrl:        fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL),
-		OpaAllowField: "allow",
-		OpaHeaders:    map[string]string{"Foo": "foo"},
-		OpaBody:       true,
+		OpaAllowField:         "allow",
+		Required:              false,
+		OpaUrl:                fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL),
+		OpaBody:               false,
+		OpaHeaders:            map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
+		OpaResponseHeaders:    map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
 	}
 
 	ctx := context.Background()
@@ -405,7 +399,7 @@ func TestServeHTTPAllowed(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost?frodo=notpass", bytes.NewReader([]byte(`{ "baggins": "shire" }`)))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost?frodo=notpass", nil)
 	req.Header.Add("Content-Type", "application/json")
 	if err != nil {
 		t.Fatal(err)
@@ -413,27 +407,46 @@ func TestServeHTTPAllowed(t *testing.T) {
 
 	opa.ServeHTTP(recorder, req)
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("Expected OK, got %v", recorder.Code)
+	resp := recorder.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status code %d, received %d", http.StatusOK, resp.StatusCode)
 	}
 	if nextCalled == false {
 		t.Fatal("next.ServeHTTP was not called")
 	}
-	if req.Header.Get("Foo") != "Bar" {
-		t.Fatal("Expected Foo:Bar header")
+	if req.Header.Get("RequestFoo") != "Bar" {
+		t.Fatal("Expected RequestFoo:Bar header")
+	}
+	if req.Header.Get("RequestAllow") != "true" {
+		t.Fatal("Expected RequestAllow:true header")
+	}
+	if req.Header.Get("RequestMissing") != "" {
+		t.Fatal("Unexpected RequestMissing: header")
+	}
+	if resp.Header.Get("ResponseFoo") != "Bar" {
+		t.Fatal("Expected ResponseFoo:Bar header")
+	}
+	if resp.Header.Get("ResponseAllow") != "true" {
+		t.Fatal("Expected Responsellow:true header")
+	}
+	if resp.Header.Get("ResponseMissing") != "" {
+		t.Fatal("Unexpected ResponseMissing: header")
 	}
 }
 
-func TestServeHTTPForbidden(t *testing.T) {
+func TestServeHTTPForbiddenByOPA(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintln(w, "{ \"result\": { \"allow\": false } }")
+		_, _ = fmt.Fprintln(w, `{ "result": { "allow": false, "foo": "Bar" } }`)
 	}))
 	defer ts.Close()
 	cfg := Config{
-		Required:      true,
-		OpaUrl:        ts.URL,
-		OpaAllowField: "allow",
+		OpaAllowField:         "allow",
+		Required:              false,
+		OpaUrl:                ts.URL,
+		OpaBody:               false,
+		OpaHeaders:            map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
+		OpaResponseHeaders:    map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
 	}
 	ctx := context.Background()
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { t.Fatal("Should not chain HTTP call") })
@@ -452,8 +465,27 @@ func TestServeHTTPForbidden(t *testing.T) {
 
 	opa.ServeHTTP(recorder, req)
 
-	if recorder.Code != http.StatusForbidden {
-		t.Fatal("Exptected Forbidden")
+	resp := recorder.Result()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("Expected status code %d, received %d", http.StatusForbidden, resp.StatusCode)
+	}
+	if req.Header.Get("RequestFoo") == "Bar" {
+		t.Fatal("Unexpected RequestFoo:Bar header")
+	}
+	if req.Header.Get("RequestAllow") == "false" {
+		t.Fatal("Unexpected RequestAllow:true header")
+	}
+	if req.Header.Get("RequestMissing") != "" {
+		t.Fatal("Unexpected RequestMissing: header")
+	}
+	if resp.Header.Get("ResponseFoo") != "Bar" {
+		t.Fatal("Expected ResponseFoo:Bar header")
+	}
+	if resp.Header.Get("ResponseAllow") != "false" {
+		t.Fatal("Expected Responsellow:false header")
+	}
+	if resp.Header.Get("ResponseMissing") != "" {
+		t.Fatal("Unexpected ResponseMissing: header")
 	}
 }
 
@@ -531,8 +563,9 @@ func TestNewJWKEndpoint(t *testing.T) {
 
 			opa.ServeHTTP(recorder, req)
 
-			if recorder.Result().StatusCode != tt.status {
-				t.Fatal("Expected OK")
+			resp := recorder.Result()
+			if resp.StatusCode != tt.status {
+				t.Fatalf("Expected status code %d, received %d", tt.status, resp.StatusCode)
 			}
 			if nextCalled != tt.next {
 				t.Fatalf("next.ServeHTTP was called: %t, expected: %t", nextCalled, tt.next)
@@ -718,6 +751,145 @@ func TestServeHTTPExpiration(t *testing.T) {
 				} else if tt.err != strings.TrimSpace(recorder.Body.String()) {
 					t.Fatalf("Expected error: %s, got: %s", tt.err, recorder.Body.String())
 				}
+			}
+		})
+	}
+}
+
+func TestServeHTTPJwtRequired(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = fmt.Fprintln(w, `{ "result": { "allow": true }`)
+	}))
+	defer ts.Close()
+	cfg := Config{
+		OpaAllowField:         "allow",
+		Required:              true,
+		OpaUrl:                ts.URL,
+		OpaBody:               false,
+	}
+
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+	opa, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	req.Header.Add("Content-Type", "application/json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opa.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("Expected status code %d, received %d", http.StatusForbidden, resp.StatusCode)
+	}
+	if nextCalled == true {
+		t.Fatal("next.ServeHTTP was called")
+	}
+}
+
+func TestServeHTTPStatusFromOPA(t *testing.T) {
+
+	var tests = []struct {
+		name                  string
+		opaHttpStatusField    string
+		statusFieldName       string
+		statusFieldValue      string
+		expectedStatus        int
+	}{
+		{
+			name:                  "status field int",
+			opaHttpStatusField:    "allow_status_code",
+			statusFieldName:       "allow_status_code",
+			statusFieldValue:      "401",
+			expectedStatus:        http.StatusUnauthorized,
+		},
+		{
+			name:                  "status field string",
+			opaHttpStatusField:    "allow_status_code",
+			statusFieldName:       "allow_status_code",
+			statusFieldValue:      "\"401\"",
+			expectedStatus:        http.StatusUnauthorized,
+		},
+		{
+			name:                  "status field incorrect type",
+			opaHttpStatusField:    "allow_status_code",
+			statusFieldName:       "allow_status_code",
+			statusFieldValue:      "401.12",
+			expectedStatus:        http.StatusForbidden,
+		},
+		{
+			name:                  "status field missing",
+			opaHttpStatusField:    "allow_status_code",
+			statusFieldName:       "missing",
+			statusFieldValue:      "401",
+			expectedStatus:        http.StatusForbidden,
+		},
+		{
+			name:                  "status field out of lower range",
+			opaHttpStatusField:    "allow_status_code",
+			statusFieldName:       "allow_status_code",
+			statusFieldValue:      "200",
+			expectedStatus:        http.StatusForbidden,
+		},
+		{
+			name:                  "status field out of upper range",
+			opaHttpStatusField:    "allow_status_code",
+			statusFieldName:       "allow_status_code",
+			statusFieldValue:      "600",
+			expectedStatus:        http.StatusForbidden,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusOK)
+				_, _ = fmt.Fprintf(w, "{ \"result\": { \"allow\": false, \"%s\": %s }}\n", tt.statusFieldName, tt.statusFieldValue)
+			}))
+			defer ts.Close()
+			cfg := Config{
+				Required:              false,
+				OpaAllowField:         "allow",
+				OpaUrl:                ts.URL,
+				OpaBody:               false,
+				OpaHttpStatusField:    tt.opaHttpStatusField,
+			}
+
+			ctx := context.Background()
+			nextCalled := false
+			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+			opa, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			recorder := httptest.NewRecorder()
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+			req.Header.Add("Content-Type", "application/json")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			opa.ServeHTTP(recorder, req)
+
+			resp := recorder.Result()
+			if resp.StatusCode != tt.expectedStatus {
+				t.Fatalf("Expected status code %d, received %d", tt.expectedStatus, resp.StatusCode)
+			}
+			if nextCalled == true {
+				t.Fatal("next.ServeHTTP was called")
 			}
 		})
 	}

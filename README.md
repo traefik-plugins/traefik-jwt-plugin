@@ -22,11 +22,7 @@ The plugin needs to be configured in the Traefik static configuration before it 
 
 The following snippet can be used as an example for the values.yaml file:
 
-```values.yaml
-pilot:
-  enabled: true
-  token: xxxxx-xxxx-xxxx
-
+```yaml
 experimental:
   plugins:
     enabled: true
@@ -38,9 +34,8 @@ additionalArguments:
 
 ### Installation via command line
 
-```config
+```sh
 traefik \
-  --experimental.pilot.token=xxxx-xxxx-xxx \
   --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin \
   --experimental.plugins.jwt.version=v0.0.11
 ```
@@ -120,7 +115,7 @@ metadata:
 
 The following section describes how to use this plugin with Open Policy Agent (OPA)
 
-## OPA input payload
+### OPA input payload
 
 The plugin will translate the HTTP request (including headers and parameters) and forwards the payload as JSON to OPA.
 For example, the following URL: `http://localhost/api/path?param1=foo&param2=bar` 
@@ -161,7 +156,7 @@ will result in the following payload (headers are reduced for readability):
         "bar"
       ]
     },
-    "body: {
+    "body": {
       "foo": "bar"
     },
     "path": [
@@ -176,10 +171,10 @@ will result in the following payload (headers are reduced for readability):
         "exp": 1652263686,
         "sub": "johndoe@host.com"
     }
-  }
+}
 ```
 
-## Example OPA policy in Rego
+### Example OPA policy in Rego
 
 The policies you enforce can be as complex or simple as you prefer. For example, the policy could decode the JWT token and verify the token is valid and has not expired, and that the user has the required claims in the token.
 

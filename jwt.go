@@ -41,7 +41,7 @@ type Config struct {
 	JwtHeaders            map[string]string
 	OpaResponseHeaders    map[string]string
 	OpaHttpStatusField    string
-	JwtCookieKey  string
+	JwtCookieKey          string
 }
 
 // CreateConfig creates a new OPA Config
@@ -50,7 +50,6 @@ func CreateConfig() *Config {
 		Required:              true, // default to Authorization JWT header is required
 		OpaAllowField:         "allow",
 		OpaBody:               true,
-		JwtCookieKey:  "jwt", // default jwt cookie key
 	}
 }
 
@@ -71,7 +70,7 @@ type JwtPlugin struct {
 	jwtHeaders            map[string]string
 	opaResponseHeaders    map[string]string
 	opaHttpStatusField    string
-	jwtCookieKey  string
+	jwtCookieKey          string
 }
 
 // LogEvent contains a single log entry
@@ -420,115 +419,69 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWr
 
 func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	// first check if the token is present in header and is valid
-	jwtToken, err := jwtPlugin.ExtractTokenFromHeader(request)
-
-	// if it is valid return the token
-	if err == nil {
-		return jwtToken, nil
+	jwtTokenStr, err := jwtPlugin.extractTokenFromHeader(request)
+	if err != nil && jwtPlugin.jwtCookieKey != "" {
+		jwtTokenStr, err = jwtPlugin.extractTokenFromCookie(request)
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	logWarn("Invalid token in Authorization header, checking cookie for token").print()
-
-	// if not, check if the token is present in cookie
-	jwtToken, err = jwtPlugin.ExtractTokenFromCookie(request)
-
-	return jwtToken, err
+	parts := strings.Split(jwtTokenStr, ".")
+	if len(parts) != 3 {
+		logError("Invalid token format, expected 3 parts").
+			withUrl(request.URL.String()).
+			withNetwork(jwtPlugin.remoteAddr(request)).
+			print()
+		return nil, fmt.Errorf("invalid token format")
+	}
+	header, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, err
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return nil, err
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
+	if err != nil {
+		return nil, err
+	}
+	jwtToken := JWT{
+		Plaintext: []byte(jwtTokenStr[0 : len(parts[0])+len(parts[1])+1]),
+		Signature: signature,
+	}
+	err = json.Unmarshal(header, &jwtToken.Header)
+	if err != nil {
+		return nil, err
+	}
+	d := json.NewDecoder(bytes.NewBuffer(payload))
+	d.UseNumber()
+	err = d.Decode(&jwtToken.Payload)
+	if err != nil {
+		return nil, err
+	}
+	return &jwtToken, nil
 }
 
-func (jwtPlugin *JwtPlugin) ExtractTokenFromHeader(request *http.Request) (*JWT, error) {
+func (jwtPlugin *JwtPlugin) extractTokenFromHeader(request *http.Request) (string, error) {
 	authHeader, ok := request.Header["Authorization"]
 	if !ok {
-		return nil, fmt.Errorf("authorization header missing")
+		return "", fmt.Errorf("authorization header missing")
 	}
 	auth := authHeader[0]
 	if !strings.HasPrefix(auth, "Bearer ") {
-		return nil, fmt.Errorf("authorization type not Bearer")
+		return "", fmt.Errorf("authorization type not Bearer")
 	}
-	parts := strings.Split(auth[7:], ".")
-	if len(parts) != 3 {
-		logError("Invalid token format, expected 3 parts").
-			withUrl(request.URL.String()).
-			withNetwork(jwtPlugin.remoteAddr(request)).
-			print()
-		return nil, fmt.Errorf("invalid token format")
-	}
-	header, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return nil, err
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, err
-	}
-	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return nil, err
-	}
-	jwtToken := JWT{
-		Plaintext: []byte(auth[7 : len(parts[0])+len(parts[1])+8]),
-		Signature: signature,
-	}
-	err = json.Unmarshal(header, &jwtToken.Header)
-	if err != nil {
-		return nil, err
-	}
-	d := json.NewDecoder(bytes.NewBuffer(payload))
-	d.UseNumber()
-	err = d.Decode(&jwtToken.Payload)
-	if err != nil {
-		return nil, err
-	}
-	return &jwtToken, nil
+	return auth[7:], nil
 }
 
-func (jwtPlugin *JwtPlugin) ExtractTokenFromCookie(request *http.Request) (*JWT, error) {
+func (jwtPlugin *JwtPlugin) extractTokenFromCookie(request *http.Request) (string, error) {
 	cookie, err := request.Cookie(jwtPlugin.jwtCookieKey)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-
-	parts := strings.Split(cookie.Value, ".")
-	if len(parts) != 3 {
-		logError("Invalid token format, expected 3 parts").
-			withUrl(request.URL.String()).
-			withNetwork(jwtPlugin.remoteAddr(request)).
-			print()
-		return nil, fmt.Errorf("invalid token format")
-	}
-
-	header, err := base64.RawURLEncoding.DecodeString(parts[0])
-	if err != nil {
-		return nil, err
-	}
-
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, err
-	}
-	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
-	if err != nil {
-		return nil, err
-	}
-
-	jwtToken := JWT{
-		Plaintext: []byte(cookie.Value[0 : len(parts[0])+len(parts[1])+1]),
-		Signature: signature,
-	}
-
-	err = json.Unmarshal(header, &jwtToken.Header)
-	if err != nil {
-		return nil, err
-	}
-
-	d := json.NewDecoder(bytes.NewBuffer(payload))
-	d.UseNumber()
-
-	err = d.Decode(&jwtToken.Payload)
-	if err != nil {
-		return nil, err
-	}
-
-	return &jwtToken, nil
+	return cookie.Value, nil
 }
 
 func (jwtPlugin *JwtPlugin) remoteAddr(req *http.Request) Network {

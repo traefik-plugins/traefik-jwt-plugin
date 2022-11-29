@@ -52,7 +52,7 @@ The plugin currently supports the following configuration settings: (all fields 
 Name | Description
 --- | ---
 OpaUrl | URL of OPA policy document requested for decision, e.g. http://opa:8181/v1/data/example.
-OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not.
+OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not. Default `allow`.
 OpaBody | Boolean indicating whether the request body should be added to the OPA input.
 PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`). Multiple field names may be specificied (string array)
 Required | Is `Authorization` header with JWT token required for every request.
@@ -64,7 +64,7 @@ JwtHeaders | Map used to inject JWT payload fields as HTTP request headers.
 OpaHeaders | Map used to inject OPA result fields as HTTP request headers. Populated if request is allowed by OPA. Only 1st level keys from OPA document are supported.
 OpaResponseHeaders | Map used to inject OPA result fields as HTTP response headers. Populated if OPA response has `OpaAllowField` present, regardless of value. Only 1st level keys from OPA document are supported.
 OpaHttpStatusField | Field in OPA JSON result, which contains int or string HTTP status code that will be returned in case of desiallowed OPA response. Accepted range is >= 300 and < 600. Only 1st level keys from OPA document are supported.
-JwtCookieKey | Name of the cookie to inject JWT (default `jwt`)
+JwtCookieKey | Name of the cookie to extract JWT if not found in `Authorization` header.
 
 ## Example configuration
 
@@ -103,6 +103,7 @@ spec:
       OpaResponseHeaders:
         X-Allowed: allow
       OpaHttpStatusField: allow_status_code
+      JwtCookieKey: jwt
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

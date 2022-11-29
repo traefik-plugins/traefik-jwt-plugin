@@ -1,0 +1,15 @@
+name: Publish release
+on:
+  workflow_dispatch
+jobs:
+  rel_job:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: bahmutov/npm-install@v1
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

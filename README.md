@@ -1,5 +1,3 @@
-
-
 # traefik-jwt-plugin ![Build](https://github.com/team-carepay/traefik-jwt-plugin/workflows/build/badge.svg)
 
 Traefik plugin for verifying JSON Web Tokens (JWT). Supports public keys, certificates or JWKS endpoints.
@@ -45,7 +43,7 @@ traefik \
 The plugin currently supports the following configuration settings: (all fields are optional)
 
 Name | Description
---- | ---
+---- | ----
 OpaUrl | URL of OPA policy document requested for decision, e.g. http://opa:8181/v1/data/example.
 OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not. Default `allow`.
 OpaBody | Boolean indicating whether the request body should be added to the OPA input.
@@ -61,7 +59,7 @@ OpaResponseHeaders | Map used to inject OPA result fields as HTTP response heade
 OpaHttpStatusField | Field in OPA JSON result, which contains int or string HTTP status code that will be returned in case of desiallowed OPA response. Accepted range is >= 300 and < 600. Only 1st level keys from OPA document are supported.
 JwtCookieKey | Name of the cookie to extract JWT if not found in `Authorization` header.
 
-## Example configuration
+### Example configuration
 
 This example uses Kubernetes Custom Resource Descriptors (CRD) :
 
@@ -176,7 +174,9 @@ will result in the following payload (headers are reduced for readability):
 
 ### Example OPA policy in Rego
 
-The policies you enforce can be as complex or simple as you prefer. For example, the policy could decode the JWT token and verify the token is valid and has not expired, and that the user has the required claims in the token.
+The policies you enforce can be as complex or simple as you prefer.
+For example, the policy could decode the JWT token and verify the token is valid and has not expired,
+and that the user has the required claims in the token.
 
 The policy below shows an simplified example:
 
@@ -201,7 +201,8 @@ has_token(tokens) {
 }
 ```
 
-In the above example, requesting `/public/anything` or `/secure/123` is allowed, however requesting `/secure/xxx` would be rejected and results in a 403 Forbidden.
+In the above example, requesting `/public/anything` or `/secure/123` is allowed, 
+however requesting `/secure/xxx` would be rejected and results in a 403 Forbidden.
 
 ## License
 

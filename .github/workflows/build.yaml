@@ -4,13 +4,13 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
     paths-ignore:
       - '*.md'
       - '*.puml'
       - '.github/workflows/release.yaml'
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:

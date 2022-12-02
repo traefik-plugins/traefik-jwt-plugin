@@ -28,49 +28,49 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
-	OpaUrl                string
-	OpaAllowField         string
-	OpaBody               bool
-	PayloadFields         []string
-	Required              bool
-	Keys                  []string
-	Alg                   string
-	Iss                   string
-	Aud                   string
-	OpaHeaders            map[string]string
-	JwtHeaders            map[string]string
-	OpaResponseHeaders    map[string]string
-	OpaHttpStatusField    string
-	JwtCookieKey          string
+	OpaUrl             string
+	OpaAllowField      string
+	OpaBody            bool
+	PayloadFields      []string
+	Required           bool
+	Keys               []string
+	Alg                string
+	Iss                string
+	Aud                string
+	OpaHeaders         map[string]string
+	JwtHeaders         map[string]string
+	OpaResponseHeaders map[string]string
+	OpaHttpStatusField string
+	JwtCookieKey       string
 }
 
 // CreateConfig creates a new OPA Config
 func CreateConfig() *Config {
 	return &Config{
-		Required:              true, // default to Authorization JWT header is required
-		OpaAllowField:         "allow",
-		OpaBody:               true,
+		Required:      true, // default to Authorization JWT header is required
+		OpaAllowField: "allow",
+		OpaBody:       true,
 	}
 }
 
 // JwtPlugin contains the runtime config
 type JwtPlugin struct {
-	next                  http.Handler
-	opaUrl                string
-	opaAllowField         string
-	opaBody               bool
-	payloadFields         []string
-	required              bool
-	jwkEndpoints          []*url.URL
-	keys                  map[string]interface{}
-	alg                   string
-	iss                   string
-	aud                   string
-	opaHeaders            map[string]string
-	jwtHeaders            map[string]string
-	opaResponseHeaders    map[string]string
-	opaHttpStatusField    string
-	jwtCookieKey          string
+	next               http.Handler
+	opaUrl             string
+	opaAllowField      string
+	opaBody            bool
+	payloadFields      []string
+	required           bool
+	jwkEndpoints       []*url.URL
+	keys               map[string]interface{}
+	alg                string
+	iss                string
+	aud                string
+	opaHeaders         map[string]string
+	jwtHeaders         map[string]string
+	opaResponseHeaders map[string]string
+	opaHttpStatusField string
+	jwtCookieKey       string
 }
 
 // LogEvent contains a single log entry
@@ -163,21 +163,21 @@ type Response struct {
 // New creates a new plugin
 func New(_ context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
 	jwtPlugin := &JwtPlugin{
-		next:                  next,
-		opaUrl:                config.OpaUrl,
-		opaAllowField:         config.OpaAllowField,
-		opaBody:               config.OpaBody,
-		payloadFields:         config.PayloadFields,
-		required:              config.Required,
-		alg:                   config.Alg,
-		iss:                   config.Iss,
-		aud:                   config.Aud,
-		keys:                  make(map[string]interface{}),
-		opaHeaders:            config.OpaHeaders,
-		jwtHeaders:            config.JwtHeaders,
-		opaResponseHeaders:    config.OpaResponseHeaders,
-		opaHttpStatusField:    config.OpaHttpStatusField,
-		jwtCookieKey:  config.JwtCookieKey,
+		next:               next,
+		opaUrl:             config.OpaUrl,
+		opaAllowField:      config.OpaAllowField,
+		opaBody:            config.OpaBody,
+		payloadFields:      config.PayloadFields,
+		required:           config.Required,
+		alg:                config.Alg,
+		iss:                config.Iss,
+		aud:                config.Aud,
+		keys:               make(map[string]interface{}),
+		opaHeaders:         config.OpaHeaders,
+		jwtHeaders:         config.JwtHeaders,
+		opaResponseHeaders: config.OpaResponseHeaders,
+		opaHttpStatusField: config.OpaHttpStatusField,
+		jwtCookieKey:       config.JwtCookieKey,
 	}
 	if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
 		return nil, err
@@ -330,7 +330,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 
 func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Request) {
 	if st, err := jwtPlugin.CheckToken(request, rw); err != nil {
-		if st >= 300 && st < 600  {
+		if st >= 300 && st < 600 {
 			http.Error(rw, err.Error(), st)
 		} else {
 			http.Error(rw, err.Error(), http.StatusForbidden)
@@ -427,6 +427,7 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 		return nil, err
 	}
 
+	logInfo(jwtTokenStr)
 	parts := strings.Split(jwtTokenStr, ".")
 	if len(parts) != 3 {
 		logError("Invalid token format, expected 3 parts").

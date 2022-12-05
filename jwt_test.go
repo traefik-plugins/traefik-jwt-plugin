@@ -67,7 +67,7 @@ func TestServeHTTPOK(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := Config{
-				JwtHeaders: map[string]string{"Name": "name"},
+				JwtHeaders: map[string]interface{}{"Name": "name"},
 				Keys:       []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"},
 			}
 			ctx := context.Background()
@@ -231,7 +231,7 @@ func TestServeOPAWithBody(t *testing.T) {
 func TestServeWithBody(t *testing.T) {
 	// TODO: add more testcases with DSA, etc.
 	cfg := Config{
-		JwtHeaders: map[string]string{"Name": "name"},
+		JwtHeaders: map[string]interface{}{"Name": "name"},
 		Keys:       []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"},
 	}
 	ctx := context.Background()
@@ -380,12 +380,12 @@ func TestServeHTTPAllowedByOPA(t *testing.T) {
 	}))
 	defer ts.Close()
 	cfg := Config{
-		OpaAllowField:         "allow",
-		Required:              false,
-		OpaUrl:                fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL),
-		OpaBody:               false,
-		OpaHeaders:            map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
-		OpaResponseHeaders:    map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
+		OpaAllowField:      "allow",
+		Required:           false,
+		OpaUrl:             fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL),
+		OpaBody:            false,
+		OpaHeaders:         map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
+		OpaResponseHeaders: map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
 	}
 
 	ctx := context.Background()
@@ -441,12 +441,12 @@ func TestServeHTTPForbiddenByOPA(t *testing.T) {
 	}))
 	defer ts.Close()
 	cfg := Config{
-		OpaAllowField:         "allow",
-		Required:              false,
-		OpaUrl:                ts.URL,
-		OpaBody:               false,
-		OpaHeaders:            map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
-		OpaResponseHeaders:    map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
+		OpaAllowField:      "allow",
+		Required:           false,
+		OpaUrl:             ts.URL,
+		OpaBody:            false,
+		OpaHeaders:         map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
+		OpaResponseHeaders: map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
 	}
 	ctx := context.Background()
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { t.Fatal("Should not chain HTTP call") })
@@ -576,7 +576,7 @@ func TestNewJWKEndpoint(t *testing.T) {
 
 func TestIssue3(t *testing.T) {
 	cfg := Config{
-		JwtHeaders: map[string]string{"Subject": "sub", "User": "preferred_username"},
+		JwtHeaders: map[string]interface{}{"Subject": "sub", "User": "preferred_username"},
 		Keys:       []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----"},
 	}
 	ctx := context.Background()
@@ -611,7 +611,7 @@ func TestIssue3(t *testing.T) {
 
 func TestIssue13(t *testing.T) {
 	cfg := Config{
-		JwtHeaders: map[string]string{"Subject": "sub", "User": "preferred_username"},
+		JwtHeaders: map[string]interface{}{"Subject": "sub", "User": "preferred_username"},
 		Keys:       []string{"-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnzyis1ZjfNB0bBgKFMSv\nvkTtwlvBsaJq7S5wA+kzeVOVpVWwkWdVha4s38XM/pa/yr47av7+z3VTmvDRyAHc\naT92whREFpLv9cj5lTeJSibyr/Mrm/YtjCZVWgaOYIhwrXwKLqPr/11inWsAkfIy\ntvHWTxZYEcXLgAXFuUuaS3uF9gEiNQwzGTU1v0FqkqTBr4B8nW3HCN47XUu0t8Y0\ne+lf4s4OxQawWD79J9/5d3Ry0vbV3Am1FtGJiJvOwRsIfVChDpYStTcHTCMqtvWb\nV6L11BWkpzGXSW4Hv43qa+GSYOD2QU68Mb59oSk2OB+BtOLpJofmbGEGgvmwyCI9\nMwIDAQAB\n-----END PUBLIC KEY-----", "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmDaxrT7mDmyGHZaBuwq6\nMimV2hUrOoZ86MT/dTpspnNL4DgvvUOjvkn7Oebg9kNmAxjfqDmHtqKdKvot/vZp\nJMPr/+s/haBDN3plDf3SeWOEWwFgVwkLnkOm+mCWEvhYL6bBGCcv9AwYYtyQONKg\n+2NFOVxtQVlGo1Z8xUIY4vELiUcqTjqBZPi3+CaxqWvGsh5Wg4Si84/xKx85Ah6f\nrAtPGGO8wG2Jqlw1R4ZHJmBgXtLXTeDI2zzxugI1BtcQfy5fd9PBVoEM6782km0R\nei3X8CqIMuv00O2juFh2rZxC9ENibTbdf2OueI+sbYoP1FsziruDHJRzKnm/oAVY\nDwIDAQAB\n-----END PUBLIC KEY-----"},
 	}
 	ctx := context.Background()
@@ -646,7 +646,7 @@ func TestIssue13(t *testing.T) {
 
 func TestIssue15(t *testing.T) {
 	cfg := Config{
-		JwtHeaders: map[string]string{"X-Subject": "sub", "X-Exp": "exp", "X-Email-Verified": "email_verified"},
+		JwtHeaders: map[string]interface{}{"X-Subject": "sub", "X-Exp": "exp", "X-Email-Verified": "email_verified"},
 	}
 	ctx := context.Background()
 	nextCalled := false
@@ -763,10 +763,10 @@ func TestServeHTTPJwtRequired(t *testing.T) {
 	}))
 	defer ts.Close()
 	cfg := Config{
-		OpaAllowField:         "allow",
-		Required:              true,
-		OpaUrl:                ts.URL,
-		OpaBody:               false,
+		OpaAllowField: "allow",
+		Required:      true,
+		OpaUrl:        ts.URL,
+		OpaBody:       false,
 	}
 
 	ctx := context.Background()
@@ -800,53 +800,53 @@ func TestServeHTTPJwtRequired(t *testing.T) {
 func TestServeHTTPStatusFromOPA(t *testing.T) {
 
 	var tests = []struct {
-		name                  string
-		opaHttpStatusField    string
-		statusFieldName       string
-		statusFieldValue      string
-		expectedStatus        int
+		name               string
+		opaHttpStatusField string
+		statusFieldName    string
+		statusFieldValue   string
+		expectedStatus     int
 	}{
 		{
-			name:                  "status field int",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "401",
-			expectedStatus:        http.StatusUnauthorized,
+			name:               "status field int",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "401",
+			expectedStatus:     http.StatusUnauthorized,
 		},
 		{
-			name:                  "status field string",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "\"401\"",
-			expectedStatus:        http.StatusUnauthorized,
+			name:               "status field string",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "\"401\"",
+			expectedStatus:     http.StatusUnauthorized,
 		},
 		{
-			name:                  "status field incorrect type",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "401.12",
-			expectedStatus:        http.StatusForbidden,
+			name:               "status field incorrect type",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "401.12",
+			expectedStatus:     http.StatusForbidden,
 		},
 		{
-			name:                  "status field missing",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "missing",
-			statusFieldValue:      "401",
-			expectedStatus:        http.StatusForbidden,
+			name:               "status field missing",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "missing",
+			statusFieldValue:   "401",
+			expectedStatus:     http.StatusForbidden,
 		},
 		{
-			name:                  "status field out of lower range",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "200",
-			expectedStatus:        http.StatusForbidden,
+			name:               "status field out of lower range",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "200",
+			expectedStatus:     http.StatusForbidden,
 		},
 		{
-			name:                  "status field out of upper range",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "600",
-			expectedStatus:        http.StatusForbidden,
+			name:               "status field out of upper range",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "600",
+			expectedStatus:     http.StatusForbidden,
 		},
 	}
 
@@ -858,11 +858,11 @@ func TestServeHTTPStatusFromOPA(t *testing.T) {
 			}))
 			defer ts.Close()
 			cfg := Config{
-				Required:              false,
-				OpaAllowField:         "allow",
-				OpaUrl:                ts.URL,
-				OpaBody:               false,
-				OpaHttpStatusField:    tt.opaHttpStatusField,
+				Required:           false,
+				OpaAllowField:      "allow",
+				OpaUrl:             ts.URL,
+				OpaBody:            false,
+				OpaHttpStatusField: tt.opaHttpStatusField,
 			}
 
 			ctx := context.Background()
@@ -949,3 +949,40 @@ func TestTokenFromCookieNotConfigured(t *testing.T) {
 		t.Fatal("next.ServeHTTP was called, but should not")
 	}
 }
+
+//func TestPayloadWithInterface(t *testing.T) {
+//	cfg := Config{
+//		JwtHeaders: map[string]interface{}{"X-Subject": "sub", "X-Exp": "exp", "X-Email-Verified": "email_verified", "base": map[string]interface{}{"user/id": 01}},
+//	}
+//	ctx := context.Background()
+//	nextCalled := false
+//	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+//
+//	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//
+//	recorder := httptest.NewRecorder()
+//
+//	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MTkyMTQ3MjIsImlhdCI6MTYxOTIxNDQyMiwianRpIjoiMDQxNDE4MTUtMjlmMy00OGVlLWI0ZGQtYTA0N2Q1NWU1MjcxIiwiaXNzIjoiaHR0cHM6Ly9rZXljbG9hay50ZXN0LnNjdy5mcmVlcGhwNS5uZXQvYXV0aC9yZWFsbXMvdGVzdCIsImF1ZCI6ImFjY291bnQiLCJzdWIiOiJjMDNhM2Q4YS1lMGI1LTQ3Y2EtOWIwZi1iMmY5ZTY5Y2YzNDgiLCJ0eXAiOiJCZWFyZXIiLCJhenAiOiJ0ZXN0LWNsaWVudCIsInNlc3Npb25fc3RhdGUiOiJjMmU1MmFhYS0yOTVkLTRhOWItOGNmMS1iYmIyYzliZmVmMmEiLCJhY3IiOiIxIiwiYWxsb3dlZC1vcmlnaW5zIjpbImh0dHBzOi8vd2hvYW1pLnRlc3Quc2N3LmZyZWVwaHA1Lm5ldCJdLCJyZWFsbV9hY2Nlc3MiOnsicm9sZXMiOlsib2ZmbGluZV9hY2Nlc3MiLCJ1bWFfYXV0aG9yaXphdGlvbiJdfSwicmVzb3VyY2VfYWNjZXNzIjp7ImFjY291bnQiOnsicm9sZXMiOlsibWFuYWdlLWFjY291bnQiLCJtYW5hZ2UtYWNjb3VudC1saW5rcyIsInZpZXctcHJvZmlsZSJdfX0sInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsImVtYWlsX3ZlcmlmaWVkIjpmYWxzZSwicHJlZmVycmVkX3VzZXJuYW1lIjoidXNlciJ9.UM_lD4nnS83CvNK6sryFTBK65_i7rzwYGNytupJB8TcXdmeIFL-a9mXcSrBA21Ch-lNO8cmVhqqRAoNzdm_DXxKn6Hq-OF3aPs-4aVUvMT1EuZx_QSWeaDf6qnxemhrUkTYmrHgmMKyUX6saeErKHTI_SXPncyctYkAaKAY8ibrM7vl9FOJC3LdKd7vAEIqwXwSN1m-aaTIVTvfhMBAlaULsiGQJW8lp0ktDtv2n3ta7zYv-Pl5bzyA7t5b1KRDUCrodZQjJfLOkwZUfNgJmHRrWBrEQg-D4CP9dr_9xTSHVFvOfWEboXOn1j2uJ0MgxikodYz2UT4qOYYhZyrB7zw"}
+//
+//	jwt.ServeHTTP(recorder, req)
+//
+//	if nextCalled == false {
+//		t.Fatal("next.ServeHTTP was not called")
+//	}
+//	if v := req.Header.Get("X-Subject"); v != "c03a3d8a-e0b5-47ca-9b0f-b2f9e69cf348" {
+//		t.Fatal("Expected header X-Subject: c03a3d8a-e0b5-47ca-9b0f-b2f9e69cf348")
+//	}
+//	if v := req.Header.Get("X-Exp"); v != "1619214722" {
+//		t.Fatal("Expected header X-Exp: 1619214722")
+//	}
+//	if v := req.Header.Get("X-Email-Verified"); v != "false" {
+//		t.Fatal("Expected header X-Email-Verified: false")
+//	}
+//}

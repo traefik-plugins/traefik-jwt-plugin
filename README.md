@@ -1,4 +1,4 @@
-# traefik-jwt-plugin ![Build](https://github.com/team-carepay/traefik-jwt-plugin/workflows/build/badge.svg)
+# traefik-jwt-plugin ![Build](https://github.com/Obmondo/traefik-jwt-plugin/workflows/build/badge.svg)
 
 Traefik plugin for verifying JSON Web Tokens (JWT). Supports public keys, certificates or JWKS endpoints.
 Supports RSA, ECDSA and symmetric keys. Supports Open Policy Agent (OPA) for additional authorization checks.
@@ -26,7 +26,7 @@ experimental:
     enabled: true
 
 additionalArguments:
-- --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin
+- --experimental.plugins.jwt.moduleName=github.com/Obmondo/traefik-jwt-plugin
 - --experimental.plugins.jwt.version=v0.0.11
 ```
 
@@ -34,7 +34,7 @@ additionalArguments:
 
 ```sh
 traefik \
-  --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin \
+  --experimental.plugins.jwt.moduleName=github.com/Obmondo/traefik-jwt-plugin \
   --experimental.plugins.jwt.version=v0.0.11
 ```
 
@@ -116,7 +116,7 @@ The following section describes how to use this plugin with Open Policy Agent (O
 ### OPA input payload
 
 The plugin will translate the HTTP request (including headers and parameters) and forwards the payload as JSON to OPA.
-For example, the following URL: `http://localhost/api/path?param1=foo&param2=bar` 
+For example, the following URL: `http://localhost/api/path?param1=foo&param2=bar`
 will result in the following payload (headers are reduced for readability):
 
 ```json
@@ -201,7 +201,7 @@ has_token(tokens) {
 }
 ```
 
-In the above example, requesting `/public/anything` or `/secure/123` is allowed, 
+In the above example, requesting `/public/anything` or `/secure/123` is allowed,
 however requesting `/secure/xxx` would be rejected and results in a 403 Forbidden.
 
 ## License

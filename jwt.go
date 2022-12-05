@@ -398,6 +398,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWr
 			}
 		}
 		for k, v := range jwtPlugin.jwtHeaders {
+			// depends on the inputs here
 			switch v.(type) {
 			case map[string]interface{}:
 				for x, y := range v.(map[string]interface{}) {

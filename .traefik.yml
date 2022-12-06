@@ -1,7 +1,7 @@
 displayName: JWT Access Policy
 type: middleware
 
-import: github.com/Obmondo/traefik-jwt-plugin
+import: github.com/obmondo/traefik-auth
 
 summary: Verifies JWT token. Supports RSA/DSA/HMAC. Support fetching keys from JWKS endpoint. Supports Open Policy Agent (OPA) for validating the request.
 

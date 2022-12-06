@@ -1,3 +1,3 @@
-module github.com/Obmondo/traefik-jwt-plugin
+module github.com/obmondo/traefik-auth
 
 go 1.16

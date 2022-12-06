@@ -1,4 +1,4 @@
-package traefik_jwt_plugin
+package traefik_auth
 
 import (
 	"bytes"

@@ -179,10 +179,14 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 		opaHttpStatusField:    config.OpaHttpStatusField,
 		jwtCookieKey:  config.JwtCookieKey,
 	}
-	if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
-		return nil, err
+	if len(config.Keys) > 0 {
+		if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
+			return nil, err
+		}
+		if len(jwtPlugin.jwkEndpoints) > 0 {
+			go jwtPlugin.BackgroundRefresh()
+		}
 	}
-	go jwtPlugin.BackgroundRefresh()
 	return jwtPlugin, nil
 }
 
@@ -220,7 +224,6 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 			return fmt.Errorf("Invalid configuration, expecting a certificate, public key or JWK URL")
 		}
 	}
-
 	return nil
 }
 

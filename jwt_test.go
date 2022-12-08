@@ -17,7 +17,7 @@ import (
 )
 
 func TestServeHTTPOK(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		name         string
 		remoteAddr   string
 		forwardedFor string
@@ -106,7 +106,7 @@ func TestServeHTTPOK(t *testing.T) {
 }
 
 func TestServeOPAWithBody(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		name           string
 		method         string
 		contentType    string
@@ -380,12 +380,12 @@ func TestServeHTTPAllowedByOPA(t *testing.T) {
 	}))
 	defer ts.Close()
 	cfg := Config{
-		OpaAllowField:         "allow",
-		Required:              false,
-		OpaUrl:                fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL),
-		OpaBody:               false,
-		OpaHeaders:            map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
-		OpaResponseHeaders:    map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
+		OpaAllowField:      "allow",
+		Required:           false,
+		OpaUrl:             fmt.Sprintf("%s/v1/data/testok?Param1=foo&Param1=bar", ts.URL),
+		OpaBody:            false,
+		OpaHeaders:         map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
+		OpaResponseHeaders: map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
 	}
 
 	ctx := context.Background()
@@ -441,12 +441,12 @@ func TestServeHTTPForbiddenByOPA(t *testing.T) {
 	}))
 	defer ts.Close()
 	cfg := Config{
-		OpaAllowField:         "allow",
-		Required:              false,
-		OpaUrl:                ts.URL,
-		OpaBody:               false,
-		OpaHeaders:            map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
-		OpaResponseHeaders:    map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
+		OpaAllowField:      "allow",
+		Required:           false,
+		OpaUrl:             ts.URL,
+		OpaBody:            false,
+		OpaHeaders:         map[string]string{"RequestFoo": "foo", "RequestAllow": "allow", "RequestMissing": "missing"},
+		OpaResponseHeaders: map[string]string{"ResponseFoo": "foo", "ResponseAllow": "allow", "ResponseMissing": "missing"},
 	}
 	ctx := context.Background()
 	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { t.Fatal("Should not chain HTTP call") })
@@ -490,7 +490,7 @@ func TestServeHTTPForbiddenByOPA(t *testing.T) {
 }
 
 func TestNewJWKEndpoint(t *testing.T) {
-	var tests = []struct {
+	tests := []struct {
 		name   string
 		key    string
 		token  string
@@ -684,7 +684,7 @@ func TestIssue15(t *testing.T) {
 func TestServeHTTPExpiration(t *testing.T) {
 	lastMinute := time.Now().Add(-1 * time.Minute).Unix()
 	nextMinute := time.Now().Add(2 * time.Minute).Unix()
-	var tests = []struct {
+	tests := []struct {
 		Name   string `json:"sub"`
 		Fields []string
 		Claims string
@@ -763,10 +763,10 @@ func TestServeHTTPJwtRequired(t *testing.T) {
 	}))
 	defer ts.Close()
 	cfg := Config{
-		OpaAllowField:         "allow",
-		Required:              true,
-		OpaUrl:                ts.URL,
-		OpaBody:               false,
+		OpaAllowField: "allow",
+		Required:      true,
+		OpaUrl:        ts.URL,
+		OpaBody:       false,
 	}
 
 	ctx := context.Background()
@@ -798,55 +798,54 @@ func TestServeHTTPJwtRequired(t *testing.T) {
 }
 
 func TestServeHTTPStatusFromOPA(t *testing.T) {
-
-	var tests = []struct {
-		name                  string
-		opaHttpStatusField    string
-		statusFieldName       string
-		statusFieldValue      string
-		expectedStatus        int
+	tests := []struct {
+		name               string
+		opaHttpStatusField string
+		statusFieldName    string
+		statusFieldValue   string
+		expectedStatus     int
 	}{
 		{
-			name:                  "status field int",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "401",
-			expectedStatus:        http.StatusUnauthorized,
+			name:               "status field int",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "401",
+			expectedStatus:     http.StatusUnauthorized,
 		},
 		{
-			name:                  "status field string",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "\"401\"",
-			expectedStatus:        http.StatusUnauthorized,
+			name:               "status field string",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "\"401\"",
+			expectedStatus:     http.StatusUnauthorized,
 		},
 		{
-			name:                  "status field incorrect type",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "401.12",
-			expectedStatus:        http.StatusForbidden,
+			name:               "status field incorrect type",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "401.12",
+			expectedStatus:     http.StatusForbidden,
 		},
 		{
-			name:                  "status field missing",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "missing",
-			statusFieldValue:      "401",
-			expectedStatus:        http.StatusForbidden,
+			name:               "status field missing",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "missing",
+			statusFieldValue:   "401",
+			expectedStatus:     http.StatusForbidden,
 		},
 		{
-			name:                  "status field out of lower range",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "200",
-			expectedStatus:        http.StatusForbidden,
+			name:               "status field out of lower range",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "200",
+			expectedStatus:     http.StatusForbidden,
 		},
 		{
-			name:                  "status field out of upper range",
-			opaHttpStatusField:    "allow_status_code",
-			statusFieldName:       "allow_status_code",
-			statusFieldValue:      "600",
-			expectedStatus:        http.StatusForbidden,
+			name:               "status field out of upper range",
+			opaHttpStatusField: "allow_status_code",
+			statusFieldName:    "allow_status_code",
+			statusFieldValue:   "600",
+			expectedStatus:     http.StatusForbidden,
 		},
 	}
 
@@ -858,11 +857,11 @@ func TestServeHTTPStatusFromOPA(t *testing.T) {
 			}))
 			defer ts.Close()
 			cfg := Config{
-				Required:              false,
-				OpaAllowField:         "allow",
-				OpaUrl:                ts.URL,
-				OpaBody:               false,
-				OpaHttpStatusField:    tt.opaHttpStatusField,
+				Required:           false,
+				OpaAllowField:      "allow",
+				OpaUrl:             ts.URL,
+				OpaBody:            false,
+				OpaHttpStatusField: tt.opaHttpStatusField,
 			}
 
 			ctx := context.Background()

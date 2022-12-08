@@ -28,49 +28,45 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
-	OpaUrl                string
-	OpaAllowField         string
-	OpaBody               bool
-	PayloadFields         []string
-	Required              bool
-	Keys                  []string
-	Alg                   string
-	Iss                   string
-	Aud                   string
-	OpaHeaders            map[string]string
-	JwtHeaders            map[string]string
-	OpaResponseHeaders    map[string]string
-	OpaHttpStatusField    string
-	JwtCookieKey          string
+	OpaUrl             string
+	OpaAllowField      string
+	OpaBody            bool
+	PayloadFields      []string
+	Required           bool
+	Keys               []string
+	Alg                string
+	OpaHeaders         map[string]string
+	JwtHeaders         map[string]string
+	OpaResponseHeaders map[string]string
+	OpaHttpStatusField string
+	JwtCookieKey       string
 }
 
 // CreateConfig creates a new OPA Config
 func CreateConfig() *Config {
 	return &Config{
-		Required:              true, // default to Authorization JWT header is required
-		OpaAllowField:         "allow",
-		OpaBody:               true,
+		Required:      true, // default to Authorization JWT header is required
+		OpaAllowField: "allow",
+		OpaBody:       true,
 	}
 }
 
 // JwtPlugin contains the runtime config
 type JwtPlugin struct {
-	next                  http.Handler
-	opaUrl                string
-	opaAllowField         string
-	opaBody               bool
-	payloadFields         []string
-	required              bool
-	jwkEndpoints          []*url.URL
-	keys                  map[string]interface{}
-	alg                   string
-	iss                   string
-	aud                   string
-	opaHeaders            map[string]string
-	jwtHeaders            map[string]string
-	opaResponseHeaders    map[string]string
-	opaHttpStatusField    string
-	jwtCookieKey          string
+	next               http.Handler
+	opaUrl             string
+	opaAllowField      string
+	opaBody            bool
+	payloadFields      []string
+	required           bool
+	jwkEndpoints       []*url.URL
+	keys               map[string]interface{}
+	alg                string
+	opaHeaders         map[string]string
+	jwtHeaders         map[string]string
+	opaResponseHeaders map[string]string
+	opaHttpStatusField string
+	jwtCookieKey       string
 }
 
 // LogEvent contains a single log entry
@@ -163,21 +159,19 @@ type Response struct {
 // New creates a new plugin
 func New(_ context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
 	jwtPlugin := &JwtPlugin{
-		next:                  next,
-		opaUrl:                config.OpaUrl,
-		opaAllowField:         config.OpaAllowField,
-		opaBody:               config.OpaBody,
-		payloadFields:         config.PayloadFields,
-		required:              config.Required,
-		alg:                   config.Alg,
-		iss:                   config.Iss,
-		aud:                   config.Aud,
-		keys:                  make(map[string]interface{}),
-		opaHeaders:            config.OpaHeaders,
-		jwtHeaders:            config.JwtHeaders,
-		opaResponseHeaders:    config.OpaResponseHeaders,
-		opaHttpStatusField:    config.OpaHttpStatusField,
-		jwtCookieKey:  config.JwtCookieKey,
+		next:               next,
+		opaUrl:             config.OpaUrl,
+		opaAllowField:      config.OpaAllowField,
+		opaBody:            config.OpaBody,
+		payloadFields:      config.PayloadFields,
+		required:           config.Required,
+		alg:                config.Alg,
+		keys:               make(map[string]interface{}),
+		opaHeaders:         config.OpaHeaders,
+		jwtHeaders:         config.JwtHeaders,
+		opaResponseHeaders: config.OpaResponseHeaders,
+		opaHttpStatusField: config.OpaHttpStatusField,
+		jwtCookieKey:       config.JwtCookieKey,
 	}
 	if len(config.Keys) > 0 {
 		if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
@@ -333,7 +327,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 
 func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Request) {
 	if st, err := jwtPlugin.CheckToken(request, rw); err != nil {
-		if st >= 300 && st < 600  {
+		if st >= 300 && st < 600 {
 			http.Error(rw, err.Error(), st)
 		} else {
 			http.Error(rw, err.Error(), http.StatusForbidden)
@@ -688,8 +682,10 @@ type nopCloser struct {
 func (n nopCloser) Read(b []byte) (int, error) { return n.r.Read(b) }
 func (n nopCloser) Close() error               { return n.c.Close() }
 
-type tokenVerifyFunction func(key interface{}, hash crypto.Hash, payload []byte, signature []byte) error
-type tokenVerifyAsymmetricFunction func(key interface{}, hash crypto.Hash, digest []byte, signature []byte) error
+type (
+	tokenVerifyFunction           func(key interface{}, hash crypto.Hash, payload, signature []byte) error
+	tokenVerifyAsymmetricFunction func(key interface{}, hash crypto.Hash, digest, signature []byte) error
+)
 
 // jwtAlgorithm describes a JWS 'alg' value
 type tokenAlgorithm struct {
@@ -714,7 +710,7 @@ var tokenAlgorithms = map[string]tokenAlgorithm{
 }
 
 // errSignatureNotVerified is returned when a signature cannot be verified.
-func verifyHMAC(key interface{}, hash crypto.Hash, payload []byte, signature []byte) error {
+func verifyHMAC(key interface{}, hash crypto.Hash, payload, signature []byte) error {
 	macKey, ok := key.([]byte)
 	if !ok {
 		return fmt.Errorf("incorrect symmetric key type")
@@ -731,7 +727,7 @@ func verifyHMAC(key interface{}, hash crypto.Hash, payload []byte, signature []b
 }
 
 func verifyAsymmetric(verify tokenVerifyAsymmetricFunction) tokenVerifyFunction {
-	return func(key interface{}, hash crypto.Hash, payload []byte, signature []byte) error {
+	return func(key interface{}, hash crypto.Hash, payload, signature []byte) error {
 		h := hash.New()
 		_, err := h.Write(payload)
 		if err != nil {
@@ -741,7 +737,7 @@ func verifyAsymmetric(verify tokenVerifyAsymmetricFunction) tokenVerifyFunction 
 	}
 }
 
-func verifyRSAPKCS(key interface{}, hash crypto.Hash, digest []byte, signature []byte) error {
+func verifyRSAPKCS(key interface{}, hash crypto.Hash, digest, signature []byte) error {
 	publicKeyRsa := key.(*rsa.PublicKey)
 	if err := rsa.VerifyPKCS1v15(publicKeyRsa, hash, digest, signature); err != nil {
 		return fmt.Errorf("token verification failed (RSAPKCS)")
@@ -749,7 +745,7 @@ func verifyRSAPKCS(key interface{}, hash crypto.Hash, digest []byte, signature [
 	return nil
 }
 
-func verifyRSAPSS(key interface{}, hash crypto.Hash, digest []byte, signature []byte) error {
+func verifyRSAPSS(key interface{}, hash crypto.Hash, digest, signature []byte) error {
 	publicKeyRsa, ok := key.(*rsa.PublicKey)
 	if !ok {
 		return fmt.Errorf("incorrect public key type")
@@ -760,7 +756,7 @@ func verifyRSAPSS(key interface{}, hash crypto.Hash, digest []byte, signature []
 	return nil
 }
 
-func verifyECDSA(key interface{}, _ crypto.Hash, digest []byte, signature []byte) error {
+func verifyECDSA(key interface{}, _ crypto.Hash, digest, signature []byte) error {
 	publicKeyEcdsa, ok := key.(*ecdsa.PublicKey)
 	if !ok {
 		return fmt.Errorf("incorrect public key type")
@@ -800,7 +796,7 @@ func logError(msg string) *LogEvent {
 	return newLogEvent("error", msg)
 }
 
-func newLogEvent(level string, msg string) *LogEvent {
+func newLogEvent(level, msg string) *LogEvent {
 	return &LogEvent{
 		Level: level,
 		Msg:   msg,

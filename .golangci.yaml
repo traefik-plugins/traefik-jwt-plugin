@@ -1,0 +1,13 @@
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+      - shadow
+  gofumpt:
+    extra-rules: true
+
+linters:
+  enable:
+    - gci
+    - gofumpt

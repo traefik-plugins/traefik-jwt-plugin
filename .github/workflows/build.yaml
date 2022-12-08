@@ -17,7 +17,7 @@ jobs:
     name: Build
     env:
       GO_VERSION: 1.17
-      GOLANGCI_LINT_VERSION: v1.42.1
+      GOLANGCI_LINT_VERSION: v1.50.0
       YAEGI_VERSION: v0.10.0
       CGO_ENABLED: 0
     runs-on: ubuntu-latest
@@ -49,6 +49,7 @@ jobs:
       uses: golangci/golangci-lint-action@v3
       with:
         version: ${{ env.GOLANGCI_LINT_VERSION }}
+        args: "--help"
 
     - name: Lint and test
       run: make lint test build

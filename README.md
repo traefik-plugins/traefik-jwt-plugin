@@ -51,12 +51,10 @@ PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`)
 Required | Is `Authorization` header with JWT token required for every request.
 Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.
 Alg | Used to verify which PKI algorithm is used in the JWT.
-Iss | Used to verify the issuer of the JWT.
-Aud | Used to verify the audience of the JWT.
 JwtHeaders | Map used to inject JWT payload fields as HTTP request headers.
 OpaHeaders | Map used to inject OPA result fields as HTTP request headers. Populated if request is allowed by OPA. Only 1st level keys from OPA document are supported.
 OpaResponseHeaders | Map used to inject OPA result fields as HTTP response headers. Populated if OPA response has `OpaAllowField` present, regardless of value. Only 1st level keys from OPA document are supported.
-OpaHttpStatusField | Field in OPA JSON result, which contains int or string HTTP status code that will be returned in case of desiallowed OPA response. Accepted range is >= 300 and < 600. Only 1st level keys from OPA document are supported.
+OpaHttpStatusField | Field in OPA JSON result, which contains int or string HTTP status code that will be returned in case of disallowed OPA response. Accepted range is >= 300 and < 600. Only 1st level keys from OPA document are supported.
 JwtCookieKey | Name of the cookie to extract JWT if not found in `Authorization` header.
 
 ### Example configuration

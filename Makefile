@@ -5,7 +5,7 @@
 default: lint test
 
 lint:
-	golangci-lint run
+	golangci-lint run -v
 
 test:
 	go test -v -cover ./...

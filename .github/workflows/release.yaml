@@ -1,6 +1,6 @@
 name: Publish release
 on:
-  workflow_dispatch
+  workflow_dispatch: {}
 jobs:
   rel_job:
     runs-on: ubuntu-latest

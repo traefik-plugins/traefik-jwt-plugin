@@ -35,8 +35,6 @@ type Config struct {
 	Required           bool
 	Keys               []string
 	Alg                string
-	Iss                string
-	Aud                string
 	OpaHeaders         map[string]string
 	JwtHeaders         map[string]string
 	OpaResponseHeaders map[string]string
@@ -64,8 +62,6 @@ type JwtPlugin struct {
 	jwkEndpoints       []*url.URL
 	keys               map[string]interface{}
 	alg                string
-	iss                string
-	aud                string
 	opaHeaders         map[string]string
 	jwtHeaders         map[string]string
 	opaResponseHeaders map[string]string
@@ -170,8 +166,6 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 		payloadFields:      config.PayloadFields,
 		required:           config.Required,
 		alg:                config.Alg,
-		iss:                config.Iss,
-		aud:                config.Aud,
 		keys:               make(map[string]interface{}),
 		opaHeaders:         config.OpaHeaders,
 		jwtHeaders:         config.JwtHeaders,

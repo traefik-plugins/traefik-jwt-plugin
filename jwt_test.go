@@ -182,7 +182,7 @@ func TestServeOPAWithBody(t *testing.T) {
 				if tt.expectedBody != nil && !reflect.DeepEqual(input.Input.Body, tt.expectedBody) {
 					t.Fatalf("Expected %v, got %v", tt.expectedBody, input.Input.Body)
 				}
-				if tt.expectedForm != nil && !reflect.DeepEqual(input.Input.Form, tt.expectedForm) {
+				if len(tt.expectedForm) == 0 && !reflect.DeepEqual(input.Input.Form, tt.expectedForm) {
 					t.Fatalf("Expected %v, got %v", tt.expectedForm, input.Input.Form)
 				}
 				w.WriteHeader(http.StatusOK)
@@ -435,9 +435,13 @@ func TestServeHTTPAllowedByOPA(t *testing.T) {
 }
 
 func TestServeHTTPForbiddenByOPA(t *testing.T) {
+	opaResponse := "{ \"result\": { \"allow\": false, \"foo\": \"Bar\" } }"
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = fmt.Fprintln(w, `{ "result": { "allow": false, "foo": "Bar" } }`)
+		_, err := w.Write([]byte(opaResponse))
+		if err != nil {
+			t.Fatal("Failed to write opa response")
+		}
 	}))
 	defer ts.Close()
 	cfg := Config{
@@ -468,6 +472,37 @@ func TestServeHTTPForbiddenByOPA(t *testing.T) {
 	resp := recorder.Result()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("Expected status code %d, received %d", http.StatusForbidden, resp.StatusCode)
+	}
+	validateOpaResponse(t, req, resp, "forbidden")
+
+	// enable OpaDebugMode
+	cfg.OpaDebugMode = true
+	opa, err = New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder = httptest.NewRecorder()
+
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	opa.ServeHTTP(recorder, req)
+	resp = recorder.Result()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("Expected status code %d, received %d", http.StatusForbidden, resp.StatusCode)
+	}
+
+	validateOpaResponse(t, req, resp, opaResponse)
+}
+
+func validateOpaResponse(t *testing.T, req *http.Request, resp *http.Response, opaResponseBody string) {
+	body, _ := io.ReadAll(resp.Body)
+
+	if strings.TrimSpace(string(body)) != opaResponseBody {
+		t.Fatalf("The body response is expected to be %q, but found: %s", opaResponseBody, string(body))
 	}
 	if req.Header.Get("RequestFoo") == "Bar" {
 		t.Fatal("Unexpected RequestFoo:Bar header")

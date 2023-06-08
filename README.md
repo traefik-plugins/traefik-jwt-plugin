@@ -47,6 +47,7 @@ Name | Description
 OpaUrl | URL of OPA policy document requested for decision, e.g. http://opa:8181/v1/data/example.
 OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not. Default `allow`.
 OpaBody | Boolean indicating whether the request body should be added to the OPA input.
+OpaDebugMode | Set the opa response in the http response body when the request isn't allowed otherwise the response body is `forbidden`
 PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`). Multiple field names may be specificied (string array)
 Required | Is `Authorization` header with JWT token required for every request.
 Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.

@@ -31,6 +31,7 @@ type Config struct {
 	OpaUrl             string
 	OpaAllowField      string
 	OpaBody            bool
+	OpaDebugMode       bool
 	PayloadFields      []string
 	Required           bool
 	Keys               []string
@@ -57,6 +58,7 @@ type JwtPlugin struct {
 	opaUrl             string
 	opaAllowField      string
 	opaBody            bool
+	opaDebugMode       bool
 	payloadFields      []string
 	required           bool
 	jwkEndpoints       []*url.URL
@@ -163,6 +165,7 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 		opaUrl:             config.OpaUrl,
 		opaAllowField:      config.OpaAllowField,
 		opaBody:            config.OpaBody,
+		opaDebugMode:       config.OpaDebugMode,
 		payloadFields:      config.PayloadFields,
 		required:           config.Required,
 		alg:                config.Alg,
@@ -594,15 +597,22 @@ func (jwtPlugin *JwtPlugin) CheckOpa(request *http.Request, token *JWT, rw http.
 	if err = json.Unmarshal(fieldResult, &allow); err != nil {
 		return 0, err
 	}
+
 	if !allow {
+		var notAllowErr error
+		if jwtPlugin.opaDebugMode {
+			notAllowErr = fmt.Errorf("%s", body)
+		} else {
+			notAllowErr = fmt.Errorf("forbidden")
+		}
 		if jwtPlugin.opaHttpStatusField != "" {
 			if rawVal, rawValOk := result.Result[jwtPlugin.opaHttpStatusField]; rawValOk {
 				if st, err := strconv.Atoi(strings.Trim(string(rawVal), `"`)); err == nil {
-					return st, fmt.Errorf("%s", body)
+					return st, notAllowErr
 				}
 			}
 		}
-		return 0, fmt.Errorf("%s", body)
+		return 0, notAllowErr
 	}
 
 	for k, v := range jwtPlugin.opaHeaders {

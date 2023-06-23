@@ -957,6 +957,42 @@ func TestTokenFromCookieConfigured(t *testing.T) {
 	}
 }
 
+func TestTokenFromCookieConfiguredButNotSet(t *testing.T) {
+	cfg := *CreateConfig()
+	cfg.JwtCookieKey = "jwt"
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jwt.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("Expected status code %d, received %d", http.StatusForbidden, resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	responseBodyExpected := "http: named cookie not present"
+	if strings.TrimSpace(string(body)) != responseBodyExpected {
+		t.Fatalf("The body response is expected to be %q, but found: %s", responseBodyExpected, string(body))
+	}
+
+	if nextCalled == true {
+		t.Fatal("next.ServeHTTP was called, but should not")
+	}
+}
+
 func TestTokenFromCookieNotConfigured(t *testing.T) {
 	cfg := *CreateConfig()
 	ctx := context.Background()

@@ -983,3 +983,97 @@ func TestTokenFromCookieNotConfigured(t *testing.T) {
 		t.Fatal("next.ServeHTTP was called, but should not")
 	}
 }
+
+func TestTokenFromQueryConfigured(t *testing.T) {
+	cfg := *CreateConfig()
+	cfg.JwtQueryKey = "jwt"
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	query := req.URL.Query()
+	query.Add("jwt", "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.TnHVsM5_N0SKi_HCwlz3ys1cDktu10g_sKkjqzVe5k09z-bmByflWPFWjAbwgRCKAc77kF8BjDNv0gisAPurBxgxNGxioDFehhcb0IS0YeCAWpzRfBMT6gQZ1gZeNM2Dg_yf4shPhF4rcUCGqnFFzIDSU9Rv2NNMK5DPO4512uTxAQUMHpi5PGTki-zykqTB10Ju1L4jRhmJwJDtGcfdHPlEKKUrFPfYl3RPZLOfdyAqSJ8Gi0R3ymDffmXHz08AJUAY_Kapk8laggIYcvFJhYGJBWZpcy7NWMiOIjEI3bogki4o7z0-Z1xMZdZ9rqypQ1MB44F8VZS2KkPfEmhSog")
+	req.URL.RawQuery = query.Encode()
+
+	jwt.ServeHTTP(recorder, req)
+
+	if nextCalled == false {
+		t.Fatal("next.ServeHTTP was not called")
+	}
+}
+
+func TestTokenFromQueryNotConfigured(t *testing.T) {
+	cfg := *CreateConfig()
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	query := req.URL.Query()
+	query.Add("jwt", "eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.TnHVsM5_N0SKi_HCwlz3ys1cDktu10g_sKkjqzVe5k09z-bmByflWPFWjAbwgRCKAc77kF8BjDNv0gisAPurBxgxNGxioDFehhcb0IS0YeCAWpzRfBMT6gQZ1gZeNM2Dg_yf4shPhF4rcUCGqnFFzIDSU9Rv2NNMK5DPO4512uTxAQUMHpi5PGTki-zykqTB10Ju1L4jRhmJwJDtGcfdHPlEKKUrFPfYl3RPZLOfdyAqSJ8Gi0R3ymDffmXHz08AJUAY_Kapk8laggIYcvFJhYGJBWZpcy7NWMiOIjEI3bogki4o7z0-Z1xMZdZ9rqypQ1MB44F8VZS2KkPfEmhSog")
+	req.URL.RawQuery = query.Encode()
+
+	jwt.ServeHTTP(recorder, req)
+
+	if nextCalled == true {
+		t.Fatal("next.ServeHTTP was called, but should not")
+	}
+}
+
+func TestTokenFromQueryConfiguredButNotInURL(t *testing.T) {
+	cfg := *CreateConfig()
+	cfg.JwtQueryKey = "jwt"
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+	jwt, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jwt.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("Expected status code %d, received %d", http.StatusForbidden, resp.StatusCode)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	responseBodyExpected := "query parameter missing"
+	if strings.TrimSpace(string(body)) != responseBodyExpected {
+		t.Fatalf("The body response is expected to be %q, but found: %s", responseBodyExpected, string(body))
+	}
+
+	if nextCalled == true {
+		t.Fatal("next.ServeHTTP was called, but should not")
+	}
+}

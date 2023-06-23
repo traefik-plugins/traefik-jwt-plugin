@@ -41,6 +41,7 @@ type Config struct {
 	OpaResponseHeaders map[string]string
 	OpaHttpStatusField string
 	JwtCookieKey       string
+	JwtQueryKey        string
 }
 
 // CreateConfig creates a new OPA Config
@@ -69,6 +70,7 @@ type JwtPlugin struct {
 	opaResponseHeaders map[string]string
 	opaHttpStatusField string
 	jwtCookieKey       string
+	jwtQueryKey        string
 }
 
 // LogEvent contains a single log entry
@@ -175,6 +177,7 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 		opaResponseHeaders: config.OpaResponseHeaders,
 		opaHttpStatusField: config.OpaHttpStatusField,
 		jwtCookieKey:       config.JwtCookieKey,
+		jwtQueryKey:        config.JwtQueryKey,
 	}
 	if len(config.Keys) > 0 {
 		if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
@@ -423,6 +426,9 @@ func (jwtPlugin *JwtPlugin) ExtractToken(request *http.Request) (*JWT, error) {
 	if err != nil && jwtPlugin.jwtCookieKey != "" {
 		jwtTokenStr, err = jwtPlugin.extractTokenFromCookie(request)
 	}
+	if err != nil && jwtPlugin.jwtQueryKey != "" {
+		jwtTokenStr, err = jwtPlugin.extractTokenFromQuery(request)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -482,6 +488,15 @@ func (jwtPlugin *JwtPlugin) extractTokenFromCookie(request *http.Request) (strin
 		return "", err
 	}
 	return cookie.Value, nil
+}
+
+func (jwtPlugin *JwtPlugin) extractTokenFromQuery(request *http.Request) (string, error) {
+	query := request.URL.Query()
+	if !query.Has(jwtPlugin.jwtQueryKey) {
+		return "", fmt.Errorf("query parameter missing")
+	}
+	parameter := query.Get(jwtPlugin.jwtQueryKey)
+	return parameter, nil
 }
 
 func (jwtPlugin *JwtPlugin) remoteAddr(req *http.Request) Network {

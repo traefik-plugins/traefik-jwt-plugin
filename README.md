@@ -57,6 +57,7 @@ OpaHeaders | Map used to inject OPA result fields as HTTP request headers. Popul
 OpaResponseHeaders | Map used to inject OPA result fields as HTTP response headers. Populated if OPA response has `OpaAllowField` present, regardless of value. Only 1st level keys from OPA document are supported.
 OpaHttpStatusField | Field in OPA JSON result, which contains int or string HTTP status code that will be returned in case of disallowed OPA response. Accepted range is >= 300 and < 600. Only 1st level keys from OPA document are supported.
 JwtCookieKey | Name of the cookie to extract JWT if not found in `Authorization` header.
+JwtQueryKey | Name of the query parameter to extract JWT if not found in `Authorization` header or in the specified cookie.
 
 ### Example configuration
 
@@ -115,7 +116,7 @@ The following section describes how to use this plugin with Open Policy Agent (O
 ### OPA input payload
 
 The plugin will translate the HTTP request (including headers and parameters) and forwards the payload as JSON to OPA.
-For example, the following URL: `http://localhost/api/path?param1=foo&param2=bar` 
+For example, the following URL: `http://localhost/api/path?param1=foo&param2=bar`
 will result in the following payload (headers are reduced for readability):
 
 ```json
@@ -200,7 +201,7 @@ has_token(tokens) {
 }
 ```
 
-In the above example, requesting `/public/anything` or `/secure/123` is allowed, 
+In the above example, requesting `/public/anything` or `/secure/123` is allowed,
 however requesting `/secure/xxx` would be rejected and results in a 403 Forbidden.
 
 ## License

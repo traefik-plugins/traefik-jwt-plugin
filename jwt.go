@@ -382,12 +382,12 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWr
 			}
 			if fieldName == "exp" {
 				if expInt, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["exp"]), 10, 64); err != nil || expInt < time.Now().Unix() {
-					logError("Token is expired").
+					logError("Token is expired ").
 						withSub(sub).
 						withUrl(request.URL.String()).
 						withNetwork(jwtPlugin.remoteAddr(request)).
 						print()
-					return 0, fmt.Errorf("token is expired")
+					return http.StatusUnauthorized, fmt.Errorf("token is expired ")
 				}
 			} else if fieldName == "nbf" {
 				if nbfInt, err := strconv.ParseInt(fmt.Sprint(jwtToken.Payload["nbf"]), 10, 64); err != nil || nbfInt > time.Now().Add(1*time.Minute).Unix() {
@@ -396,7 +396,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWr
 						withUrl(request.URL.String()).
 						withNetwork(jwtPlugin.remoteAddr(request)).
 						print()
-					return 0, fmt.Errorf("token not valid yet")
+					return http.StatusUnauthorized, fmt.Errorf("token not valid yet")
 				}
 			}
 		}

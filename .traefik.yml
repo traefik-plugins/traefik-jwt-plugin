@@ -1,11 +1,9 @@
-displayName: JWT Access Policy
+displayName: JWT Validation
 type: middleware
 
-import: github.com/team-carepay/traefik-jwt-plugin
+import: github.com/golem1987/traefik-jwt-plugin
 
-summary: Verifies JWT token. Supports RSA/DSA/HMAC. Support fetching keys from JWKS endpoint. Supports Open Policy Agent (OPA) for validating the request.
-
-iconPath: jwt.png
+summary: Verifies JWT token.
 
 testData:
   OpaUrl: http://localhost:8181/v1/data/example

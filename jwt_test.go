@@ -21,6 +21,7 @@ func TestServeHTTPOK(t *testing.T) {
 		name         string
 		remoteAddr   string
 		forwardedFor string
+		authPrefix   string
 	}{
 		{
 			name:         "x-forwarded-for, ipv4, no port",
@@ -62,6 +63,10 @@ func TestServeHTTPOK(t *testing.T) {
 			name:       "remoteAddr, ipv6, with port",
 			remoteAddr: "[1fff:0:a88:85a3::ac1f]:8001",
 		},
+		{
+			name:       "Authorization, uppercase prefix",
+			authPrefix: "BEARER",
+		},
 	}
 
 	for _, tt := range tests {
@@ -85,7 +90,11 @@ func TestServeHTTPOK(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A"}
+			authPrefix := "Bearer"
+			if len(tt.authPrefix) > 0 {
+				authPrefix = tt.authPrefix
+			}
+			req.Header["Authorization"] = []string{fmt.Sprintf("%s eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A", authPrefix)}
 			if len(tt.forwardedFor) > 0 {
 				req.Header["X-Forwarded-For"] = []string{tt.forwardedFor}
 			}

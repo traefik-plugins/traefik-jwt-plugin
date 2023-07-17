@@ -476,7 +476,7 @@ func (jwtPlugin *JwtPlugin) extractTokenFromHeader(request *http.Request) (strin
 		return "", fmt.Errorf("authorization header missing")
 	}
 	auth := authHeader[0]
-	if !strings.HasPrefix(auth, "Bearer ") {
+	if !strings.HasPrefix(strings.ToLower(auth), "bearer ") {
 		return "", fmt.Errorf("authorization type not Bearer")
 	}
 	return auth[7:], nil

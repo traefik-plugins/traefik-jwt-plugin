@@ -113,6 +113,8 @@ metadata:
 
 The following section describes how to use this plugin with Open Policy Agent (OPA)
 
+![OPA diagram](http://www.plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/team-carepay/traefik-jwt-plugin/main/opa.puml)
+
 ### OPA input payload
 
 The plugin will translate the HTTP request (including headers and parameters) and forwards the payload as JSON to OPA.
@@ -180,28 +182,27 @@ and that the user has the required claims in the token.
 
 The policy below shows an simplified example:
 
-```config
+```rego
 package example
 
-default allow = false
+import future.keywords.in
+import future.keywords.if
 
-allow {
-    input.method = "GET"
-    input.path[0] = "public"
+default allow := false
+
+allow if {
+    input.method == "GET"
+    input.path[0] == "public"
 }
 
-allow {
-    input.method = "GET"
-    input.path = [ "secure", i ]
-    has_token([ "123", "456"])
-}
-
-has_token(tokens) {
-    input.path[1] = tokens[i]
+allow if {
+    input.method == "GET"
+    input.path[0] == "secure"
+    input.path[1] in {"123", "456"}
 }
 ```
 
-In the above example, requesting `/public/anything` or `/secure/123` is allowed,
+In the above example, requesting `/public/anything` or `/secure/123` or `/secure/456` is allowed,
 however requesting `/secure/xxx` would be rejected and results in a 403 Forbidden.
 
 ## License

@@ -1,0 +1,15 @@
+@startuml
+actor User
+component "Load Balancer" as lb
+component "Trefik with\ntraefik-jwt-plugin" as t
+component "OPA" as opa
+component "Microservice" as ms
+User -right-> lb
+User <-right- lb
+lb -right-> t
+lb <-right- t
+t -down-> opa
+t <-down- opa
+t -right-> ms
+t <-right- ms
+@enduml

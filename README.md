@@ -52,6 +52,7 @@ PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`)
 Required | Is `Authorization` header with JWT token required for every request.
 Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.
 Alg | Used to verify which PKI algorithm is used in the JWT.
+JwksHeaders | Map used to add headers to a JWKS request (e.g. credentials for a 3rd party JWKS service).
 JwtHeaders | Map used to inject JWT payload fields as HTTP request headers.
 OpaHeaders | Map used to inject OPA result fields as HTTP request headers. Populated if request is allowed by OPA. Only 1st level keys from OPA document are supported.
 OpaResponseHeaders | Map used to inject OPA result fields as HTTP response headers. Populated if OPA response has `OpaAllowField` present, regardless of value. Only 1st level keys from OPA document are supported.

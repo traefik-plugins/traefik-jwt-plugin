@@ -1122,3 +1122,68 @@ func TestTokenFromQueryConfiguredButNotInURL(t *testing.T) {
 		t.Fatal("next.ServeHTTP was called, but should not")
 	}
 }
+
+func TestJwksHeaders(t *testing.T) {
+	tests := []struct {
+		name        string
+		jwksHeaders map[string]string
+		expected    map[string]string
+	}{
+		{
+			name:        "No Headers",
+			jwksHeaders: map[string]string{},
+			expected:    map[string]string{},
+		},
+		{
+			name:        "One Header",
+			jwksHeaders: map[string]string{"Content-Type": "application/json"},
+			expected:    map[string]string{"Content-Type": "application/json"},
+		},
+		{
+			name: "Multiple Headers",
+			jwksHeaders: map[string]string{
+				"Authorization": "Bearer token",
+				"User-Agent":    "Traefik",
+			},
+			expected: map[string]string{
+				"Authorization": "Bearer token",
+				"User-Agent":    "Traefik",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				JwksHeaders: tt.jwksHeaders,
+			}
+			ctx := context.Background()
+
+			jwtPlugin, err := New(ctx, nil, &cfg, "test-traefik-jwt-plugin")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				for key, val := range tt.expected {
+					if r.Header.Get(key) != val {
+						t.Errorf("Expected header %s to be %s, got %s", key, val, r.Header.Get(key))
+					}
+				}
+			}))
+			defer ts.Close()
+
+			jwtPlugin.(*JwtPlugin).jwkEndpoints = append(jwtPlugin.(*JwtPlugin).jwkEndpoints, mustParseUrl(ts.URL))
+
+			jwtPlugin.(*JwtPlugin).FetchKeys()
+		})
+	}
+}
+
+func mustParseUrl(urlStr string) *url.URL {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}

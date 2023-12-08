@@ -38,6 +38,7 @@ type Config struct {
 	Alg                string
 	OpaHeaders         map[string]string
 	JwtHeaders         map[string]string
+	JwksHeaders        map[string]string
 	OpaResponseHeaders map[string]string
 	OpaHttpStatusField string
 	JwtCookieKey       string
@@ -55,6 +56,7 @@ func CreateConfig() *Config {
 
 // JwtPlugin contains the runtime config
 type JwtPlugin struct {
+	httpClient         *http.Client
 	next               http.Handler
 	opaUrl             string
 	opaAllowField      string
@@ -67,6 +69,7 @@ type JwtPlugin struct {
 	alg                string
 	opaHeaders         map[string]string
 	jwtHeaders         map[string]string
+	jwksHeaders        map[string]string
 	opaResponseHeaders map[string]string
 	opaHttpStatusField string
 	jwtCookieKey       string
@@ -163,6 +166,7 @@ type Response struct {
 // New creates a new plugin
 func New(_ context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
 	jwtPlugin := &JwtPlugin{
+		httpClient:         &http.Client{},
 		next:               next,
 		opaUrl:             config.OpaUrl,
 		opaAllowField:      config.OpaAllowField,
@@ -174,6 +178,7 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 		keys:               make(map[string]interface{}),
 		opaHeaders:         config.OpaHeaders,
 		jwtHeaders:         config.JwtHeaders,
+		jwksHeaders:        config.JwksHeaders,
 		opaResponseHeaders: config.OpaResponseHeaders,
 		opaHttpStatusField: config.OpaHttpStatusField,
 		jwtCookieKey:       config.JwtCookieKey,
@@ -231,7 +236,15 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 	logInfo(fmt.Sprintf("FetchKeys - #%d jwkEndpoints to fetch", len(jwtPlugin.jwkEndpoints))).
 		print()
 	for _, u := range jwtPlugin.jwkEndpoints {
-		response, err := http.Get(u.String())
+		req, err := http.NewRequest("GET", u.String(), nil)
+		if err != nil {
+			logWarn("FetchKeys - Failed to create request").withUrl(u.String()).print()
+			continue
+		}
+		for headerKey, headerValue := range jwtPlugin.jwksHeaders {
+			req.Header.Add(headerKey, headerValue)
+		}
+		response, err := jwtPlugin.httpClient.Do(req)
 		if err != nil {
 			logWarn("FetchKeys - Failed to fetch keys").withUrl(u.String()).print()
 			continue

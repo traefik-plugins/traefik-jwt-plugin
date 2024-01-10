@@ -1,3 +1,3 @@
-module github.com/team-carepay/traefik-jwt-plugin
+module github.com/traefik-plugins/traefik-jwt-plugin
 
-go 1.16
+go 1.17

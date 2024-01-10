@@ -1,4 +1,4 @@
-# traefik-jwt-plugin ![Build](https://github.com/team-carepay/traefik-jwt-plugin/workflows/build/badge.svg)
+# traefik-jwt-plugin ![Build](https://github.com/traefik-plugins/traefik-jwt-plugin/workflows/build/badge.svg)
 
 Traefik plugin for verifying JSON Web Tokens (JWT). Supports public keys, certificates or JWKS endpoints.
 Supports RSA, ECDSA and symmetric keys. Supports Open Policy Agent (OPA) for additional authorization checks.
@@ -26,7 +26,7 @@ experimental:
     enabled: true
 
 additionalArguments:
-- --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin
+- --experimental.plugins.jwt.moduleName=github.com/traefik-plugins/traefik-jwt-plugin
 - --experimental.plugins.jwt.version=v0.0.11
 ```
 
@@ -34,7 +34,7 @@ additionalArguments:
 
 ```sh
 traefik \
-  --experimental.plugins.jwt.moduleName=github.com/team-carepay/traefik-jwt-plugin \
+  --experimental.plugins.jwt.moduleName=github.com/traefik-plugins/traefik-jwt-plugin \
   --experimental.plugins.jwt.version=v0.0.11
 ```
 
@@ -114,7 +114,7 @@ metadata:
 
 The following section describes how to use this plugin with Open Policy Agent (OPA)
 
-![OPA diagram](http://www.plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/team-carepay/traefik-jwt-plugin/main/opa.puml)
+![OPA diagram](http://www.plantuml.com/plantuml/proxy?cache=no&src=https://raw.githubusercontent.com/traefik-plugins/traefik-jwt-plugin/main/opa.puml)
 
 ### OPA input payload
 

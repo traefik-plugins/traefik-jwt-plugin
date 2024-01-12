@@ -1,19 +1,6 @@
-name: Publish release
+name: Release
 on:
   workflow_dispatch: {}
 jobs:
-  rel_job:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 18
-      - uses: wagoid/commitlint-github-action@v5
-      - uses: bahmutov/npm-install@v1
-      - run: npx semantic-release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+  release:
+    uses: traefik-plugins/workflows/.github/workflows/release.yaml@main

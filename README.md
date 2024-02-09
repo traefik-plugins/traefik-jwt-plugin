@@ -27,7 +27,7 @@ experimental:
 
 additionalArguments:
 - --experimental.plugins.jwt.moduleName=github.com/traefik-plugins/traefik-jwt-plugin
-- --experimental.plugins.jwt.version=v0.0.11
+- --experimental.plugins.jwt.version=v0.7.0
 ```
 
 ### Installation via command line
@@ -35,8 +35,9 @@ additionalArguments:
 ```sh
 traefik \
   --experimental.plugins.jwt.moduleName=github.com/traefik-plugins/traefik-jwt-plugin \
-  --experimental.plugins.jwt.version=v0.0.11
+  --experimental.plugins.jwt.version=v0.7.0
 ```
+_Note: Replace version with the current release_
 
 ## Configuration
 

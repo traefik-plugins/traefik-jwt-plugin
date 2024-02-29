@@ -26,7 +26,7 @@ The following snippet should be added to `values.yaml`:
 plugins:
   jwt:
     moduleName: github.com/traefik-plugins/traefik-jwt-plugin
-    version: v0.7.0
+    version: v0.7.1
 ```
 
 ### Installation via command line
@@ -34,7 +34,7 @@ plugins:
 ```sh
 traefik \
   --experimental.plugins.jwt.moduleName=github.com/traefik-plugins/traefik-jwt-plugin \
-  --experimental.plugins.jwt.version=v0.7.0
+  --experimental.plugins.jwt.version=v0.7.1
 ```
 
 ## Configuration

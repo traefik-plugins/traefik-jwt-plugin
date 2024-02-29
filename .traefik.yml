@@ -1,9 +1,9 @@
-displayName: JWT Access Policy
+displayName: JWT And OPA Access Management
 type: middleware
 
 import: github.com/traefik-plugins/traefik-jwt-plugin
 
-summary: Verifies JWT token. Supports RSA/DSA/HMAC. Support fetching keys from JWKS endpoint. Supports Open Policy Agent (OPA) for validating the request.
+summary: Checks JWT tokens for required fields. Supports Open Policy Agent (OPA) and signature validation with JWKS.
 
 iconPath: jwt.png
 

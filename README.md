@@ -18,12 +18,11 @@ The plugin needs to be configured in the Traefik static configuration before it 
 
 ### Installation with Helm
 
-Tested with chart version 26.0..
+Tested with [official Traefik chart](https://artifacthub.io/packages/helm/traefik/traefik) version 26.0.0.
 
-The following snippet can be used as an example for the `values.yaml`:
+The following snippet should be added to `values.yaml`:
 
 ```yaml
-
 plugins:
   jwt:
     moduleName: github.com/traefik-plugins/traefik-jwt-plugin

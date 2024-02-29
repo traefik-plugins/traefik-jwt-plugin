@@ -27,7 +27,7 @@ experimental:
 
 additionalArguments:
 - --experimental.plugins.jwt.moduleName=github.com/traefik-plugins/traefik-jwt-plugin
-- --experimental.plugins.jwt.version=v0.0.11
+- --experimental.plugins.jwt.version=v0.7.0
 ```
 
 ### Installation via command line
@@ -35,7 +35,7 @@ additionalArguments:
 ```sh
 traefik \
   --experimental.plugins.jwt.moduleName=github.com/traefik-plugins/traefik-jwt-plugin \
-  --experimental.plugins.jwt.version=v0.0.11
+  --experimental.plugins.jwt.version=v0.7.0
 ```
 
 ## Configuration
@@ -48,7 +48,7 @@ OpaUrl | URL of OPA policy document requested for decision, e.g. http://opa:8181
 OpaAllowField | Field in the JSON result which contains a boolean, indicating whether the request is allowed or not. Default `allow`.
 OpaBody | Boolean indicating whether the request body should be added to the OPA input.
 OpaDebugMode | Set the opa response in the http response body when the request isn't allowed otherwise the response body is `forbidden`
-PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`). Multiple field names may be specificied (string array)
+PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`). Multiple field names may be specified (string array)
 Required | Is `Authorization` header with JWT token required for every request.
 Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.
 Alg | Used to verify which PKI algorithm is used in the JWT.
@@ -65,7 +65,7 @@ JwtQueryKey | Name of the query parameter to extract JWT if not found in `Author
 This example uses Kubernetes Custom Resource Descriptors (CRD) :
 
 ```yaml
-apiVersion: traefik.containo.us/v1alpha1
+apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: jwt

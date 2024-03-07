@@ -16,20 +16,21 @@ Features:
 
 The plugin needs to be configured in the Traefik static configuration before it can be used.
 
-### Installation with Helm
+### Kubernetes
 
 Tested with [official Traefik chart](https://artifacthub.io/packages/helm/traefik/traefik) version 26.0.0.
 
 The following snippet should be added to `values.yaml`:
 
 ```yaml
-plugins:
-  jwt:
-    moduleName: github.com/traefik-plugins/traefik-jwt-plugin
-    version: v0.7.1
+experimental:
+  plugins:
+    jwt:
+      moduleName: github.com/traefik-plugins/traefik-jwt-plugin
+      version: v0.7.1
 ```
 
-### Installation via command line
+### Command line
 
 ```sh
 traefik \

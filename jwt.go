@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,6 +36,7 @@ type Config struct {
 	PayloadFields      []string
 	Required           bool
 	Keys               []string
+	ForceRefreshKeys   bool
 	Alg                string
 	OpaHeaders         map[string]string
 	JwtHeaders         map[string]string
@@ -74,6 +76,9 @@ type JwtPlugin struct {
 	opaHttpStatusField string
 	jwtCookieKey       string
 	jwtQueryKey        string
+
+	keysLock        sync.RWMutex
+	forceRefreshCmd chan chan<- struct{}
 }
 
 // LogEvent contains a single log entry
@@ -189,6 +194,9 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 			return nil, err
 		}
 		if len(jwtPlugin.jwkEndpoints) > 0 {
+			if config.ForceRefreshKeys {
+				jwtPlugin.forceRefreshCmd = make(chan chan<- struct{})
+			}
 			go jwtPlugin.BackgroundRefresh()
 		}
 	}
@@ -196,13 +204,33 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 }
 
 func (jwtPlugin *JwtPlugin) BackgroundRefresh() {
+	jwtPlugin.FetchKeys()
 	for {
-		jwtPlugin.FetchKeys()
-		time.Sleep(15 * time.Minute) // 15 min
+		select {
+		case keysFetchedChan := <-jwtPlugin.forceRefreshCmd:
+			jwtPlugin.FetchKeys()
+			keysFetchedChan <- struct{}{}
+		case <-time.After(15 * time.Minute):
+			jwtPlugin.FetchKeys()
+		}
 	}
 }
 
+func (jwtPlugin *JwtPlugin) forceRefreshKeys() (refreshed bool) {
+	if jwtPlugin.forceRefreshCmd == nil || len(jwtPlugin.jwkEndpoints) == 0 {
+		return
+	}
+	refreshedCh := make(chan struct{})
+	jwtPlugin.forceRefreshCmd <- refreshedCh
+	<-refreshedCh
+	refreshed = true
+	return
+}
+
 func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
+	jwtPlugin.keysLock.Lock()
+	defer jwtPlugin.keysLock.Unlock()
+
 	for _, certificate := range certificates {
 		if block, rest := pem.Decode([]byte(certificate)); block != nil {
 			if len(rest) > 0 {
@@ -235,6 +263,7 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 func (jwtPlugin *JwtPlugin) FetchKeys() {
 	logInfo(fmt.Sprintf("FetchKeys - #%d jwkEndpoints to fetch", len(jwtPlugin.jwkEndpoints))).
 		print()
+	fetchedKeys := map[string]interface{}{}
 	for _, u := range jwtPlugin.jwkEndpoints {
 		req, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
@@ -281,7 +310,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 					ptr := new(rsa.PublicKey)
 					ptr.N = new(big.Int).SetBytes(nBytes)
 					ptr.E = int(new(big.Int).SetBytes(eBytes).Uint64())
-					jwtPlugin.keys[key.Kid] = ptr
+					fetchedKeys[key.Kid] = ptr
 				}
 			case "EC":
 				{
@@ -323,7 +352,7 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 					ptr.Curve = crv
 					ptr.X = new(big.Int).SetBytes(xBytes)
 					ptr.Y = new(big.Int).SetBytes(yBytes)
-					jwtPlugin.keys[key.Kid] = ptr
+					fetchedKeys[key.Kid] = ptr
 				}
 			case "oct":
 				{
@@ -337,10 +366,17 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 							break
 						}
 					}
-					jwtPlugin.keys[key.Kid] = kBytes
+					fetchedKeys[key.Kid] = kBytes
 				}
 			}
 		}
+	}
+
+	jwtPlugin.keysLock.Lock()
+	defer jwtPlugin.keysLock.Unlock()
+
+	for k, v := range fetchedKeys {
+		jwtPlugin.keys[k] = v
 	}
 }
 
@@ -373,7 +409,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWr
 	if jwtToken != nil {
 		sub = fmt.Sprint(jwtToken.Payload["sub"])
 		// only verify jwt tokens if keys are configured
-		if len(jwtPlugin.keys) > 0 || len(jwtPlugin.jwkEndpoints) > 0 {
+		if len(jwtPlugin.getKeysSync()) > 0 || len(jwtPlugin.jwkEndpoints) > 0 {
 			if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
 				logError(fmt.Sprintf("Token is invalid - err: %s", err.Error())).
 					withSub(sub).
@@ -550,6 +586,12 @@ func (jwtPlugin *JwtPlugin) remoteAddr(req *http.Request) Network {
 	}
 }
 
+func (jwtPlugin *JwtPlugin) getKeysSync() map[string]interface{} {
+	jwtPlugin.keysLock.RLock()
+	defer jwtPlugin.keysLock.RUnlock()
+	return jwtPlugin.keys
+}
+
 func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
 	for _, h := range jwtToken.Header.Crit {
 		if _, ok := supportedHeaderNames[h]; !ok {
@@ -564,11 +606,14 @@ func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
 	if jwtPlugin.alg != "" && jwtToken.Header.Alg != jwtPlugin.alg {
 		return fmt.Errorf("incorrect alg, expected %s got %s", jwtPlugin.alg, jwtToken.Header.Alg)
 	}
-	key, ok := jwtPlugin.keys[jwtToken.Header.Kid]
+	key, ok := jwtPlugin.getKeysSync()[jwtToken.Header.Kid]
+	if !ok && jwtPlugin.forceRefreshKeys() {
+		key, ok = jwtPlugin.getKeysSync()[jwtToken.Header.Kid]
+	}
 	if ok {
 		return a.verify(key, a.hash, jwtToken.Plaintext, jwtToken.Signature)
 	} else {
-		for _, key := range jwtPlugin.keys {
+		for _, key := range jwtPlugin.getKeysSync() {
 			err := a.verify(key, a.hash, jwtToken.Plaintext, jwtToken.Signature)
 			if err == nil {
 				return nil

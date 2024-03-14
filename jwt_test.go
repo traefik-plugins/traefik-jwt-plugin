@@ -618,6 +618,54 @@ func TestNewJWKEndpoint(t *testing.T) {
 	}
 }
 
+func TestForceRefreshKeys(t *testing.T) {
+	keys := `{"keys":[{"kty":"oct","kid":"57bd26a0-6209-4a93-a688-f8752be5d191","k":"eW91ci01MTItYml0LXNlY3JldA","alg":"HS512"}]}`
+	token := "Bearer eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCIsImNyaXQiOlsia2lkIl0sImtpZCI6IjU3YmQyNmEwLTYyMDktNGE5My1hNjg4LWY4NzUyYmU1ZDE5MSJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.573ixRAw4I4XUFJwJGpv5dHNOGaexX5zTtF0nOQTWuU2_JyZjD-7cuMPxQUHOv8RR0kQrS0uVdo_N1lzTCPFnA"
+	jwksCalledCounter := 0
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() { jwksCalledCounter++ }()
+		w.WriteHeader(http.StatusOK)
+		if jwksCalledCounter == 0 {
+			fmt.Fprintln(w, `{"keys":[]}`)
+			return
+		}
+		_, _ = fmt.Fprintln(w, keys)
+	}))
+	defer ts.Close()
+	cfg := Config{
+		Keys:             []string{ts.URL},
+		ForceRefreshKeys: true,
+	}
+	ctx := context.Background()
+	nextCalled := false
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+	opa, err := New(ctx, next, &cfg, "test-traefik-jwt-plugin")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Add("Authorization", token)
+
+	opa.ServeHTTP(recorder, req)
+
+	resp := recorder.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status code %d, received %d", http.StatusOK, resp.StatusCode)
+	}
+	if !nextCalled {
+		t.Fatalf("next.ServeHTTP was called: %t, expected: %t", nextCalled, true)
+	}
+	if jwksCalledCounter != 2 {
+		t.Fatalf("jwks was called: %d times, expected: %d", jwksCalledCounter, 2)
+	}
+}
+
 func TestIssue3(t *testing.T) {
 	cfg := Config{
 		JwtHeaders: map[string]string{"Subject": "sub", "User": "preferred_username"},

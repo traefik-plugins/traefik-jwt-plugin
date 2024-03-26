@@ -43,6 +43,7 @@ type Config struct {
 	OpaHttpStatusField string
 	JwtCookieKey       string
 	JwtQueryKey        string
+	KeysWhitelist      []string
 }
 
 // CreateConfig creates a new OPA Config
@@ -74,6 +75,7 @@ type JwtPlugin struct {
 	opaHttpStatusField string
 	jwtCookieKey       string
 	jwtQueryKey        string
+	keysWhitelist      map[string]struct{}
 }
 
 // LogEvent contains a single log entry
@@ -183,6 +185,7 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 		opaHttpStatusField: config.OpaHttpStatusField,
 		jwtCookieKey:       config.JwtCookieKey,
 		jwtQueryKey:        config.JwtQueryKey,
+		keysWhitelist:      make(map[string]struct{}),
 	}
 	if len(config.Keys) > 0 {
 		if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
@@ -192,6 +195,11 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 			go jwtPlugin.BackgroundRefresh()
 		}
 	}
+
+	for _, k := range config.KeysWhitelist {
+		jwtPlugin.keys[k] = struct{}{}
+	}
+
 	return jwtPlugin, nil
 }
 
@@ -359,6 +367,17 @@ func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Requ
 }
 
 func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWriter) (int, error) {
+	// check for whitelisted tokens
+	jwtTokenStr, err := jwtPlugin.extractTokenFromHeader(request)
+
+	if err != nil {
+		return 0, err
+	}
+
+	if _, ok := jwtPlugin.keysWhitelist[jwtTokenStr]; ok {
+		return http.StatusOK, nil
+	}
+
 	jwtToken, err := jwtPlugin.ExtractToken(request)
 	if jwtToken == nil {
 		if jwtPlugin.required {

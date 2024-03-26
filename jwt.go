@@ -225,6 +225,8 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 			}
 		} else if u, err := url.ParseRequestURI(certificate); err == nil {
 			jwtPlugin.jwkEndpoints = append(jwtPlugin.jwkEndpoints, u)
+		} else if len([]byte(certificate)) == 32 || len([]byte(certificate)) == 48 || len([]byte(certificate)) == 64 {
+			jwtPlugin.keys[strconv.Itoa(len(jwtPlugin.keys))] = []byte(certificate)
 		} else {
 			return fmt.Errorf("Invalid configuration, expecting a certificate, public key or JWK URL")
 		}

@@ -28,22 +28,23 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
-	OpaUrl             string
-	OpaAllowField      string
-	OpaBody            bool
-	OpaDebugMode       bool
-	PayloadFields      []string
-	Required           bool
-	Keys               []string
-	Alg                string
-	OpaHeaders         map[string]string
-	JwtHeaders         map[string]string
-	JwksHeaders        map[string]string
-	OpaResponseHeaders map[string]string
-	OpaHttpStatusField string
-	JwtCookieKey       string
-	JwtQueryKey        string
-	KeysWhitelist      []string
+	OverwriteAuthorization string
+	OpaUrl                 string
+	OpaAllowField          string
+	OpaBody                bool
+	OpaDebugMode           bool
+	PayloadFields          []string
+	Required               bool
+	Keys                   []string
+	Alg                    string
+	OpaHeaders             map[string]string
+	JwtHeaders             map[string]string
+	JwksHeaders            map[string]string
+	OpaResponseHeaders     map[string]string
+	OpaHttpStatusField     string
+	JwtCookieKey           string
+	JwtQueryKey            string
+	KeysWhitelist          []string
 }
 
 // CreateConfig creates a new OPA Config
@@ -57,25 +58,26 @@ func CreateConfig() *Config {
 
 // JwtPlugin contains the runtime config
 type JwtPlugin struct {
-	httpClient         *http.Client
-	next               http.Handler
-	opaUrl             string
-	opaAllowField      string
-	opaBody            bool
-	opaDebugMode       bool
-	payloadFields      []string
-	required           bool
-	jwkEndpoints       []*url.URL
-	keys               map[string]interface{}
-	alg                string
-	opaHeaders         map[string]string
-	jwtHeaders         map[string]string
-	jwksHeaders        map[string]string
-	opaResponseHeaders map[string]string
-	opaHttpStatusField string
-	jwtCookieKey       string
-	jwtQueryKey        string
-	keysWhitelist      map[string]struct{}
+	overwriteAuthorization string
+	httpClient             *http.Client
+	next                   http.Handler
+	opaUrl                 string
+	opaAllowField          string
+	opaBody                bool
+	opaDebugMode           bool
+	payloadFields          []string
+	required               bool
+	jwkEndpoints           []*url.URL
+	keys                   map[string]interface{}
+	alg                    string
+	opaHeaders             map[string]string
+	jwtHeaders             map[string]string
+	jwksHeaders            map[string]string
+	opaResponseHeaders     map[string]string
+	opaHttpStatusField     string
+	jwtCookieKey           string
+	jwtQueryKey            string
+	keysWhitelist          map[string]struct{}
 }
 
 // LogEvent contains a single log entry
@@ -168,24 +170,25 @@ type Response struct {
 // New creates a new plugin
 func New(_ context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
 	jwtPlugin := &JwtPlugin{
-		httpClient:         &http.Client{},
-		next:               next,
-		opaUrl:             config.OpaUrl,
-		opaAllowField:      config.OpaAllowField,
-		opaBody:            config.OpaBody,
-		opaDebugMode:       config.OpaDebugMode,
-		payloadFields:      config.PayloadFields,
-		required:           config.Required,
-		alg:                config.Alg,
-		keys:               make(map[string]interface{}),
-		opaHeaders:         config.OpaHeaders,
-		jwtHeaders:         config.JwtHeaders,
-		jwksHeaders:        config.JwksHeaders,
-		opaResponseHeaders: config.OpaResponseHeaders,
-		opaHttpStatusField: config.OpaHttpStatusField,
-		jwtCookieKey:       config.JwtCookieKey,
-		jwtQueryKey:        config.JwtQueryKey,
-		keysWhitelist:      make(map[string]struct{}),
+		overwriteAuthorization: config.OverwriteAuthorization,
+		httpClient:             &http.Client{},
+		next:                   next,
+		opaUrl:                 config.OpaUrl,
+		opaAllowField:          config.OpaAllowField,
+		opaBody:                config.OpaBody,
+		opaDebugMode:           config.OpaDebugMode,
+		payloadFields:          config.PayloadFields,
+		required:               config.Required,
+		alg:                    config.Alg,
+		keys:                   make(map[string]interface{}),
+		opaHeaders:             config.OpaHeaders,
+		jwtHeaders:             config.JwtHeaders,
+		jwksHeaders:            config.JwksHeaders,
+		opaResponseHeaders:     config.OpaResponseHeaders,
+		opaHttpStatusField:     config.OpaHttpStatusField,
+		jwtCookieKey:           config.JwtCookieKey,
+		jwtQueryKey:            config.JwtQueryKey,
+		keysWhitelist:          make(map[string]struct{}),
 	}
 	if len(config.Keys) > 0 {
 		if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
@@ -363,6 +366,11 @@ func (jwtPlugin *JwtPlugin) ServeHTTP(rw http.ResponseWriter, request *http.Requ
 		}
 		return
 	}
+
+	if len(jwtPlugin.overwriteAuthorization) != 0 {
+		request.Header.Set("authorization", jwtPlugin.overwriteAuthorization)
+	}
+
 	jwtPlugin.next.ServeHTTP(rw, request)
 }
 
@@ -451,6 +459,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWr
 			return st, err
 		}
 	}
+
 	return 0, nil
 }
 

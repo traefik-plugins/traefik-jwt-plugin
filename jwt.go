@@ -200,7 +200,7 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 	}
 
 	for _, k := range config.KeysWhitelist {
-		jwtPlugin.keys[k] = struct{}{}
+		jwtPlugin.keysWhitelist[k] = struct{}{}
 	}
 
 	return jwtPlugin, nil

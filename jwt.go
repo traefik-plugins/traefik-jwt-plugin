@@ -27,6 +27,9 @@ import (
 	"time"
 )
 
+// map of cancel  functions for background refresh. whe a new configuration is loaded, the old background refresh with the same name is cancelled
+var backgroundRefreshCancel map[string]context.CancelFunc = make(map[string]context.CancelFunc)
+
 // Config the plugin configuration.
 type Config struct {
 	OpaUrl             string
@@ -77,8 +80,10 @@ type JwtPlugin struct {
 	jwtCookieKey       string
 	jwtQueryKey        string
 
+	name            string
 	keysLock        sync.RWMutex
 	forceRefreshCmd chan chan<- struct{}
+	cancelCtx       context.Context
 }
 
 // LogEvent contains a single log entry
@@ -169,7 +174,7 @@ type Response struct {
 }
 
 // New creates a new plugin
-func New(_ context.Context, next http.Handler, config *Config, _ string) (http.Handler, error) {
+func New(ctx context.Context, next http.Handler, config *Config, pluginName string) (http.Handler, error) {
 	jwtPlugin := &JwtPlugin{
 		httpClient:         &http.Client{},
 		next:               next,
@@ -188,6 +193,7 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 		opaHttpStatusField: config.OpaHttpStatusField,
 		jwtCookieKey:       config.JwtCookieKey,
 		jwtQueryKey:        config.JwtQueryKey,
+		name:               pluginName,
 	}
 	if len(config.Keys) > 0 {
 		if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
@@ -197,6 +203,13 @@ func New(_ context.Context, next http.Handler, config *Config, _ string) (http.H
 			if config.ForceRefreshKeys {
 				jwtPlugin.forceRefreshCmd = make(chan chan<- struct{})
 			}
+			if backgroundRefreshCancel[pluginName] != nil {
+				logInfo(fmt.Sprintf("Cancel BackgroundRefresh %s", pluginName)).print()
+				backgroundRefreshCancel[pluginName]()
+			}
+			cancel, cancelFunc := context.WithCancel(ctx)
+			backgroundRefreshCancel[pluginName] = cancelFunc
+			jwtPlugin.cancelCtx = cancel
 			go jwtPlugin.BackgroundRefresh()
 		}
 	}
@@ -210,6 +223,9 @@ func (jwtPlugin *JwtPlugin) BackgroundRefresh() {
 		case keysFetchedChan := <-jwtPlugin.forceRefreshCmd:
 			jwtPlugin.FetchKeys()
 			keysFetchedChan <- struct{}{}
+		case <-jwtPlugin.cancelCtx.Done():
+			logInfo(fmt.Sprintf("Quit BackgroundRefresh for %s", jwtPlugin.name)).print()
+			return
 		case <-time.After(15 * time.Minute):
 			jwtPlugin.FetchKeys()
 		}

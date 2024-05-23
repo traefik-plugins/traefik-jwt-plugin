@@ -159,7 +159,7 @@ type PayloadInput struct {
 	Headers    map[string][]string    `json:"headers"`
 	JWTHeader  JwtHeader              `json:"tokenHeader"`
 	JWTPayload map[string]interface{} `json:"tokenPayload"`
-	Body       map[string]interface{} `json:"body,omitempty"`
+	Body       interface{}            `json:"body,omitempty"`
 	Form       url.Values             `json:"form,omitempty"`
 }
 

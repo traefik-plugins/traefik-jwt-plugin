@@ -121,7 +121,7 @@ func TestServeOPAWithBody(t *testing.T) {
 		contentType    string
 		body           string
 		allowed        bool
-		expectedBody   map[string]interface{}
+		expectedBody   interface{}
 		expectedForm   url.Values
 		expectedStatus int
 		drainBody      bool
@@ -141,6 +141,28 @@ func TestServeOPAWithBody(t *testing.T) {
 			expectedBody: map[string]interface{}{
 				"killroy": "washere",
 			},
+			expectedStatus: http.StatusOK,
+			drainBody:      true,
+		},
+		{
+			name:        "jsonArray",
+			method:      "POST",
+			contentType: "application/json",
+			body:        `[ "killroy", "washere" ]`,
+			allowed:     true,
+			expectedBody: []interface{}{
+				"killroy", "washere",
+			},
+			expectedStatus: http.StatusOK,
+			drainBody:      true,
+		},
+		{
+			name:           "jsonLiteral",
+			method:         "POST",
+			contentType:    "application/json",
+			body:           `"killroy"`,
+			allowed:        true,
+			expectedBody:   "killroy",
 			expectedStatus: http.StatusOK,
 			drainBody:      true,
 		},

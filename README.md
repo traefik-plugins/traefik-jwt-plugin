@@ -58,8 +58,10 @@ JwtHeaders | Map used to inject JWT payload fields as HTTP request headers.
 OpaHeaders | Map used to inject OPA result fields as HTTP request headers. Populated if request is allowed by OPA. Only 1st level keys from OPA document are supported.
 OpaResponseHeaders | Map used to inject OPA result fields as HTTP response headers. Populated if OPA response has `OpaAllowField` present, regardless of value. Only 1st level keys from OPA document are supported.
 OpaHttpStatusField | Field in OPA JSON result, which contains int or string HTTP status code that will be returned in case of disallowed OPA response. Accepted range is >= 300 and < 600. Only 1st level keys from OPA document are supported.
-JwtCookieKey | Name of the cookie to extract JWT if not found in `Authorization` header.
-JwtQueryKey | Name of the query parameter to extract JWT if not found in `Authorization` header or in the specified cookie.
+JwtCookieKey | (Deprecated, use JwtSources)Name of the cookie to extract JWT if not found in `Authorization` header.
+JwtQueryKey | (Deprecated, use JwtSources) Name of the query parameter to extract JWT if not found in `Authorization` header or in the specified cookie.
+JwtSources | Ordered List of sources [bearer, header, query, cookie] of the JWT. config format is a list of maps e.g. [{type: bearer, key: Authorization}, {type: query, key, jwt}]
+
 
 ### Example configuration
 
@@ -98,7 +100,11 @@ spec:
       OpaResponseHeaders:
         X-Allowed: allow
       OpaHttpStatusField: allow_status_code
-      JwtCookieKey: jwt
+      JwtSources:
+        - type: bearer
+          key: Authorization
+        - type: cookie
+          key: jwt
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

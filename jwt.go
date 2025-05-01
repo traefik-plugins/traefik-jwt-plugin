@@ -49,6 +49,7 @@ type Config struct {
 	JwtCookieKey       string // Deprecated: use JwtSources instead
 	JwtQueryKey        string // Deprecated: use JwtSources instead
 	JwtSources         []map[string]string
+	Aud                string
 }
 
 // CreateConfig creates a new OPA Config
@@ -79,6 +80,7 @@ type JwtPlugin struct {
 	opaResponseHeaders map[string]string
 	opaHttpStatusField string
 	jwtSources         []map[string]string
+	aud                string
 
 	name            string
 	keysLock        sync.RWMutex
@@ -192,6 +194,7 @@ func New(ctx context.Context, next http.Handler, config *Config, pluginName stri
 		opaResponseHeaders: config.OpaResponseHeaders,
 		opaHttpStatusField: config.OpaHttpStatusField,
 		jwtSources:         config.JwtSources,
+		aud:                config.Aud,
 		name:               pluginName,
 	}
 	// use default order if jwtSourceOrder is set
@@ -471,6 +474,43 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWr
 						withNetwork(jwtPlugin.remoteAddr(request)).
 						print()
 					return 0, fmt.Errorf("token not valid yet")
+				}
+			}
+			if fieldName == "aud" && jwtPlugin.aud != "" {
+				audValue := jwtToken.Payload["aud"]
+				switch v := audValue.(type) {
+				case string:
+					if v != jwtPlugin.aud {
+						logError(fmt.Sprintf("Token audience mismatch, expected %s got %s", jwtPlugin.aud, v)).
+							withSub(sub).
+							withUrl(request.URL.String()).
+							withNetwork(jwtPlugin.remoteAddr(request)).
+							print()
+						return 0, fmt.Errorf("token audience mismatch")
+					}
+				case []interface{}:
+					found := false
+					for _, a := range v {
+						if aStr, ok := a.(string); ok && aStr == jwtPlugin.aud {
+							found = true
+							break
+						}
+					}
+					if !found {
+						logError(fmt.Sprintf("Token audience not found in list, expected %s", jwtPlugin.aud)).
+							withSub(sub).
+							withUrl(request.URL.String()).
+							withNetwork(jwtPlugin.remoteAddr(request)).
+							print()
+						return 0, fmt.Errorf("token audience not found in list")
+					}
+				default:
+					logError("Token audience has invalid type").
+						withSub(sub).
+						withUrl(request.URL.String()).
+						withNetwork(jwtPlugin.remoteAddr(request)).
+						print()
+					return 0, fmt.Errorf("token audience has invalid type")
 				}
 			}
 		}

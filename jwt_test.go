@@ -1311,3 +1311,107 @@ func mustParseUrl(urlStr string) *url.URL {
 	}
 	return u
 }
+
+func TestServeHTTPAudience(t *testing.T) {
+	tests := []struct {
+		Name       string
+		Fields     []string
+		Aud        string
+		Claims     string
+		err        string
+		nextCalled bool
+	}{
+		{
+			Name:       "valid string audience",
+			Fields:     []string{"aud"},
+			Aud:        "my-api",
+			Claims:     `{"aud": "my-api"}`,
+			err:        "",
+			nextCalled: true,
+		},
+		{
+			Name:       "valid array audience",
+			Fields:     []string{"aud"},
+			Aud:        "my-api",
+			Claims:     `{"aud": ["other-api", "my-api"]}`,
+			err:        "",
+			nextCalled: true,
+		},
+		{
+			Name:       "invalid string audience",
+			Fields:     []string{"aud"},
+			Aud:        "my-api",
+			Claims:     `{"aud": "other-api"}`,
+			err:        "token audience mismatch",
+			nextCalled: false,
+		},
+		{
+			Name:       "invalid array audience",
+			Fields:     []string{"aud"},
+			Aud:        "my-api",
+			Claims:     `{"aud": ["other-api", "another-api"]}`,
+			err:        "token audience not found in list",
+			nextCalled: false,
+		},
+		{
+			Name:       "missing audience when required",
+			Fields:     []string{"aud"},
+			Aud:        "my-api",
+			Claims:     `{}`,
+			err:        "payload missing required field aud",
+			nextCalled: false,
+		},
+		{
+			Name:       "audience not configured",
+			Fields:     []string{"aud"},
+			Aud:        "",
+			Claims:     `{"aud": "my-api"}`,
+			err:        "",
+			nextCalled: true,
+		},
+		{
+			Name:       "invalid audience type",
+			Fields:     []string{"aud"},
+			Aud:        "my-api",
+			Claims:     `{"aud": 123}`,
+			err:        "token audience has invalid type",
+			nextCalled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.Name, func(t *testing.T) {
+			ctx := context.Background()
+			nextCalled := false
+			next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) { nextCalled = true })
+
+			jwt, err := New(ctx, next, &Config{
+				PayloadFields: tt.Fields,
+				Aud:           tt.Aud,
+			}, "test-traefik-jwt-plugin")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			recorder := httptest.NewRecorder()
+
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://localhost", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			req.Header["Authorization"] = []string{"Bearer eyJhbGciOiJSUzUxMiIsInR5cCI6IkpXVCJ9." + base64.RawURLEncoding.EncodeToString([]byte(tt.Claims)) + ".JlX3gXGyClTBFciHhknWrjo7SKqyJ5iBO0n-3S2_I7cIgfaZAeRDJ3SQEbaPxVC7X8aqGCOM-pQOjZPKUJN8DMFrlHTOdqMs0TwQ2PRBmVAxXTSOZOoEhD4ZNCHohYoyfoDhJDP4Qye_FCqu6POJzg0Jcun4d3KW04QTiGxv2PkYqmB7nHxYuJdnqE3704hIS56pc_8q6AW0WIT0W-nIvwzaSbtBU9RgaC7ZpBD2LiNE265UBIFraMDF8IAFw9itZSUCTKg1Q-q27NwwBZNGYStMdIBDor2Bsq5ge51EkWajzZ7ALisVp-bskzUsqUf77ejqX_CBAqkNdH1Zebn93A"}
+
+			jwt.ServeHTTP(recorder, req)
+
+			if tt.nextCalled != nextCalled {
+				t.Fatalf("Expected next.ServeHTTP called: %v, got: %v", tt.nextCalled, nextCalled)
+			}
+			if tt.err != "" {
+				if strings.TrimSpace(recorder.Body.String()) != tt.err {
+					t.Fatalf("Expected error: %s, got: %s", tt.err, recorder.Body.String())
+				}
+			}
+		})
+	}
+}

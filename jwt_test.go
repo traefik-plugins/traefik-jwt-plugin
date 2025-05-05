@@ -179,7 +179,7 @@ func TestServeOPAWithBody(t *testing.T) {
 		{
 			name:        "form",
 			method:      "POST",
-			contentType: "application/x-www-url-formencoded",
+			contentType: "application/x-www-form-urlencoded",
 			body:        `foo=bar&bar=foo`,
 			allowed:     true,
 			expectedForm: map[string][]string{

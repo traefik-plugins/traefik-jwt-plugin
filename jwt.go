@@ -811,7 +811,7 @@ func toOPAPayload(request *http.Request, includeBody bool) (*Payload, error) {
 				if err != nil {
 					return nil, err
 				}
-			} else if contentType == "application/x-www-url-formencoded" {
+			} else if contentType == "application/x-www-form-urlencoded" {
 				input.Form, err = url.ParseQuery(string(save))
 				if err != nil {
 					return nil, err

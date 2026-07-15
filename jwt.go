@@ -27,8 +27,61 @@ import (
 	"time"
 )
 
-// map of cancel  functions for background refresh. whe a new configuration is loaded, the old background refresh with the same name is cancelled
-var backgroundRefreshCancel map[string]context.CancelFunc = make(map[string]context.CancelFunc)
+// keyRegistry holds the key material shared by every plugin instance built
+// from the same configuration. Traefik constructs a separate plugin instance
+// per router chain referencing the middleware, and rebuilds them all on every
+// dynamic configuration reload — so instances must not own their refresh
+// goroutine: cancelling "the previous" goroutine by name kills the refresher
+// of a sibling instance that is still serving, freezing its keys. Instead,
+// all instances share one registry with a single goroutine per configuration.
+// Registries live for the process lifetime; one orphaned by a config change
+// keeps refreshing unused, bounded by the number of distinct configs seen.
+type keyRegistry struct {
+	name            string
+	httpClient      *http.Client
+	jwksHeaders     map[string]string
+	forceRefreshCmd chan chan<- struct{}
+	refreshTimeout  time.Duration
+
+	keysLock     sync.RWMutex
+	keys         map[string]interface{}
+	jwkEndpoints []*url.URL
+}
+
+var (
+	keyRegistriesLock sync.Mutex
+	keyRegistries     = make(map[string]*keyRegistry)
+)
+
+// getKeyRegistry returns the registry for the given middleware configuration,
+// creating it and starting its background refresh on first use. fmt renders
+// maps with sorted keys, so the id is deterministic.
+func getKeyRegistry(pluginName string, config *Config) (*keyRegistry, error) {
+	keyRegistriesLock.Lock()
+	defer keyRegistriesLock.Unlock()
+
+	id := fmt.Sprintf("%s|%v|%v|%d", pluginName, config.Keys, config.JwksHeaders, config.JwksFetchTimeoutSecs)
+	if registry, ok := keyRegistries[id]; ok {
+		return registry, nil
+	}
+	timeout := time.Duration(config.JwksFetchTimeoutSecs) * time.Second
+	registry := &keyRegistry{
+		name:            pluginName,
+		httpClient:      &http.Client{Timeout: timeout},
+		jwksHeaders:     config.JwksHeaders,
+		forceRefreshCmd: make(chan chan<- struct{}),
+		refreshTimeout:  timeout,
+		keys:            make(map[string]interface{}),
+	}
+	if err := registry.ParseKeys(config.Keys); err != nil {
+		return nil, err
+	}
+	if len(registry.jwkEndpoints) > 0 {
+		go registry.BackgroundRefresh()
+	}
+	keyRegistries[id] = registry
+	return registry, nil
+}
 
 // Config the plugin configuration.
 type Config struct {
@@ -50,6 +103,12 @@ type Config struct {
 	JwtQueryKey        string // Deprecated: use JwtSources instead
 	JwtSources         []map[string]string
 	Aud                string
+
+	// JwksFetchTimeoutSecs bounds each request to a JWKS endpoint, and with
+	// ForceRefreshKeys also bounds how long a request waits for a forced key
+	// refresh before continuing with the currently cached keys; 0 (the
+	// default) means no timeout.
+	JwksFetchTimeoutSecs int
 }
 
 // CreateConfig creates a new OPA Config
@@ -63,7 +122,6 @@ func CreateConfig() *Config {
 
 // JwtPlugin contains the runtime config
 type JwtPlugin struct {
-	httpClient         *http.Client
 	next               http.Handler
 	opaUrl             string
 	opaAllowField      string
@@ -71,21 +129,17 @@ type JwtPlugin struct {
 	opaDebugMode       bool
 	payloadFields      []string
 	required           bool
-	jwkEndpoints       []*url.URL
-	keys               map[string]interface{}
 	alg                string
 	opaHeaders         map[string]string
 	jwtHeaders         map[string]string
-	jwksHeaders        map[string]string
 	opaResponseHeaders map[string]string
 	opaHttpStatusField string
 	jwtSources         []map[string]string
 	aud                string
 
-	name            string
-	keysLock        sync.RWMutex
-	forceRefreshCmd chan chan<- struct{}
-	cancelCtx       context.Context
+	name         string
+	forceRefresh bool
+	registry     *keyRegistry
 }
 
 // LogEvent contains a single log entry
@@ -178,7 +232,6 @@ type Response struct {
 // New creates a new plugin
 func New(ctx context.Context, next http.Handler, config *Config, pluginName string) (http.Handler, error) {
 	jwtPlugin := &JwtPlugin{
-		httpClient:         &http.Client{},
 		next:               next,
 		opaUrl:             config.OpaUrl,
 		opaAllowField:      config.OpaAllowField,
@@ -187,15 +240,14 @@ func New(ctx context.Context, next http.Handler, config *Config, pluginName stri
 		payloadFields:      config.PayloadFields,
 		required:           config.Required,
 		alg:                config.Alg,
-		keys:               make(map[string]interface{}),
 		opaHeaders:         config.OpaHeaders,
 		jwtHeaders:         config.JwtHeaders,
-		jwksHeaders:        config.JwksHeaders,
 		opaResponseHeaders: config.OpaResponseHeaders,
 		opaHttpStatusField: config.OpaHttpStatusField,
 		jwtSources:         config.JwtSources,
 		aud:                config.Aud,
 		name:               pluginName,
+		forceRefresh:       config.ForceRefreshKeys,
 	}
 	// use default order if jwtSourceOrder is set
 	if len(jwtPlugin.jwtSources) == 0 {
@@ -207,57 +259,52 @@ func New(ctx context.Context, next http.Handler, config *Config, pluginName stri
 			jwtPlugin.jwtSources = append(jwtPlugin.jwtSources, map[string]string{"type": "query", "key": config.JwtQueryKey})
 		}
 	}
-	if len(config.Keys) > 0 {
-		if err := jwtPlugin.ParseKeys(config.Keys); err != nil {
-			return nil, err
-		}
-		if len(jwtPlugin.jwkEndpoints) > 0 {
-			if config.ForceRefreshKeys {
-				jwtPlugin.forceRefreshCmd = make(chan chan<- struct{})
-			}
-			if backgroundRefreshCancel[pluginName] != nil {
-				logInfo(fmt.Sprintf("Cancel BackgroundRefresh %s", pluginName)).print()
-				backgroundRefreshCancel[pluginName]()
-			}
-			cancel, cancelFunc := context.WithCancel(ctx)
-			backgroundRefreshCancel[pluginName] = cancelFunc
-			jwtPlugin.cancelCtx = cancel
-			go jwtPlugin.BackgroundRefresh()
-		}
+	registry, err := getKeyRegistry(pluginName, config)
+	if err != nil {
+		return nil, err
 	}
+	jwtPlugin.registry = registry
 	return jwtPlugin, nil
 }
 
-func (jwtPlugin *JwtPlugin) BackgroundRefresh() {
-	jwtPlugin.FetchKeys()
+func (r *keyRegistry) BackgroundRefresh() {
+	r.FetchKeys()
 	for {
 		select {
-		case keysFetchedChan := <-jwtPlugin.forceRefreshCmd:
-			jwtPlugin.FetchKeys()
+		case keysFetchedChan := <-r.forceRefreshCmd:
+			r.FetchKeys()
 			keysFetchedChan <- struct{}{}
-		case <-jwtPlugin.cancelCtx.Done():
-			logInfo(fmt.Sprintf("Quit BackgroundRefresh for %s", jwtPlugin.name)).print()
-			return
 		case <-time.After(15 * time.Minute):
-			jwtPlugin.FetchKeys()
+			r.FetchKeys()
 		}
 	}
 }
 
-func (jwtPlugin *JwtPlugin) forceRefreshKeys() (refreshed bool) {
-	if jwtPlugin.forceRefreshCmd == nil || len(jwtPlugin.jwkEndpoints) == 0 {
+func (r *keyRegistry) forceRefreshKeys() (refreshed bool) {
+	if len(r.jwkEndpoints) == 0 {
 		return
 	}
-	refreshedCh := make(chan struct{})
-	jwtPlugin.forceRefreshCmd <- refreshedCh
-	<-refreshedCh
-	refreshed = true
+	// Buffered so BackgroundRefresh can always deliver its reply, even if this
+	// caller has already timed out and moved on.
+	refreshedCh := make(chan struct{}, 1)
+	select {
+	case r.forceRefreshCmd <- refreshedCh:
+	case <-time.After(forceRefreshTimeout):
+		logWarn("forceRefreshKeys - timed out waiting for background refresh worker").print()
+		return
+	}
+	select {
+	case <-refreshedCh:
+		refreshed = true
+	case <-time.After(forceRefreshTimeout):
+		logWarn("forceRefreshKeys - timed out waiting for key fetch").print()
+	}
 	return
 }
 
-func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
-	jwtPlugin.keysLock.Lock()
-	defer jwtPlugin.keysLock.Unlock()
+func (r *keyRegistry) ParseKeys(certificates []string) error {
+	r.keysLock.Lock()
+	defer r.keysLock.Unlock()
 
 	for _, certificate := range certificates {
 		if block, rest := pem.Decode([]byte(certificate)); block != nil {
@@ -269,18 +316,18 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 				if err != nil {
 					return fmt.Errorf("failed to parse a PEM certificate: %v", err)
 				}
-				jwtPlugin.keys[base64.RawURLEncoding.EncodeToString(cert.SubjectKeyId)] = cert.PublicKey
+				r.keys[base64.RawURLEncoding.EncodeToString(cert.SubjectKeyId)] = cert.PublicKey
 			} else if block.Type == "PUBLIC KEY" || block.Type == "RSA PUBLIC KEY" {
 				key, err := x509.ParsePKIXPublicKey(block.Bytes)
 				if err != nil {
 					return fmt.Errorf("failed to parse a PEM public key: %v", err)
 				}
-				jwtPlugin.keys[strconv.Itoa(len(jwtPlugin.keys))] = key
+				r.keys[strconv.Itoa(len(r.keys))] = key
 			} else {
 				return fmt.Errorf("failed to extract a Key from the PEM certificate")
 			}
 		} else if u, err := url.ParseRequestURI(certificate); err == nil {
-			jwtPlugin.jwkEndpoints = append(jwtPlugin.jwkEndpoints, u)
+			r.jwkEndpoints = append(r.jwkEndpoints, u)
 		} else {
 			return fmt.Errorf("Invalid configuration, expecting a certificate, public key or JWK URL")
 		}
@@ -288,20 +335,20 @@ func (jwtPlugin *JwtPlugin) ParseKeys(certificates []string) error {
 	return nil
 }
 
-func (jwtPlugin *JwtPlugin) FetchKeys() {
-	logInfo(fmt.Sprintf("FetchKeys - #%d jwkEndpoints to fetch", len(jwtPlugin.jwkEndpoints))).
+func (r *keyRegistry) FetchKeys() {
+	logInfo(fmt.Sprintf("FetchKeys - #%d jwkEndpoints to fetch", len(r.jwkEndpoints))).
 		print()
 	fetchedKeys := map[string]interface{}{}
-	for _, u := range jwtPlugin.jwkEndpoints {
+	for _, u := range r.jwkEndpoints {
 		req, err := http.NewRequest("GET", u.String(), nil)
 		if err != nil {
 			logWarn("FetchKeys - Failed to create request").withUrl(u.String()).print()
 			continue
 		}
-		for headerKey, headerValue := range jwtPlugin.jwksHeaders {
+		for headerKey, headerValue := range r.jwksHeaders {
 			req.Header.Add(headerKey, headerValue)
 		}
-		response, err := jwtPlugin.httpClient.Do(req)
+		response, err := r.httpClient.Do(req)
 		if err != nil {
 			logWarn("FetchKeys - Failed to fetch keys").withUrl(u.String()).print()
 			continue
@@ -400,11 +447,11 @@ func (jwtPlugin *JwtPlugin) FetchKeys() {
 		}
 	}
 
-	jwtPlugin.keysLock.Lock()
-	defer jwtPlugin.keysLock.Unlock()
+	r.keysLock.Lock()
+	defer r.keysLock.Unlock()
 
 	for k, v := range fetchedKeys {
-		jwtPlugin.keys[k] = v
+		r.keys[k] = v
 	}
 }
 
@@ -437,7 +484,7 @@ func (jwtPlugin *JwtPlugin) CheckToken(request *http.Request, rw http.ResponseWr
 	if jwtToken != nil {
 		sub = fmt.Sprint(jwtToken.Payload["sub"])
 		// only verify jwt tokens if keys are configured
-		if len(jwtPlugin.getKeysSync()) > 0 || len(jwtPlugin.jwkEndpoints) > 0 {
+		if len(jwtPlugin.registry.getKeysSync()) > 0 || len(jwtPlugin.registry.jwkEndpoints) > 0 {
 			if err = jwtPlugin.VerifyToken(jwtToken); err != nil {
 				logError(fmt.Sprintf("Token is invalid - err: %s", err.Error())).
 					withSub(sub).
@@ -679,10 +726,10 @@ func (jwtPlugin *JwtPlugin) remoteAddr(req *http.Request) Network {
 	}
 }
 
-func (jwtPlugin *JwtPlugin) getKeysSync() map[string]interface{} {
-	jwtPlugin.keysLock.RLock()
-	defer jwtPlugin.keysLock.RUnlock()
-	return jwtPlugin.keys
+func (r *keyRegistry) getKeysSync() map[string]interface{} {
+	r.keysLock.RLock()
+	defer r.keysLock.RUnlock()
+	return r.keys
 }
 
 func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
@@ -699,14 +746,14 @@ func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
 	if jwtPlugin.alg != "" && jwtToken.Header.Alg != jwtPlugin.alg {
 		return fmt.Errorf("incorrect alg, expected %s got %s", jwtPlugin.alg, jwtToken.Header.Alg)
 	}
-	key, ok := jwtPlugin.getKeysSync()[jwtToken.Header.Kid]
-	if !ok && jwtPlugin.forceRefreshKeys() {
-		key, ok = jwtPlugin.getKeysSync()[jwtToken.Header.Kid]
+	key, ok := jwtPlugin.registry.getKeysSync()[jwtToken.Header.Kid]
+	if !ok && jwtPlugin.forceRefresh && jwtPlugin.registry.forceRefreshKeys() {
+		key, ok = jwtPlugin.registry.getKeysSync()[jwtToken.Header.Kid]
 	}
 	if ok {
 		return a.verify(key, a.hash, jwtToken.Plaintext, jwtToken.Signature)
 	} else {
-		for _, key := range jwtPlugin.getKeysSync() {
+		for _, key := range jwtPlugin.registry.getKeysSync() {
 			err := a.verify(key, a.hash, jwtToken.Plaintext, jwtToken.Signature)
 			if err == nil {
 				return nil

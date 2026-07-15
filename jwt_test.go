@@ -1283,7 +1283,10 @@ func TestJwksHeaders(t *testing.T) {
 			}
 			ctx := context.Background()
 
-			jwtPlugin, err := New(ctx, nil, &cfg, "test-traefik-jwt-plugin")
+			// Unique name per subtest: this test mutates registry internals
+			// (jwkEndpoints below), and registries are shared by plugin name +
+			// key config, so a common name would leak state into other tests.
+			jwtPlugin, err := New(ctx, nil, &cfg, "test-traefik-jwt-plugin-jwksheaders-"+tt.name)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1297,9 +1300,10 @@ func TestJwksHeaders(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			jwtPlugin.(*JwtPlugin).jwkEndpoints = append(jwtPlugin.(*JwtPlugin).jwkEndpoints, mustParseUrl(ts.URL))
+			registry := jwtPlugin.(*JwtPlugin).registry
+			registry.jwkEndpoints = append(registry.jwkEndpoints, mustParseUrl(ts.URL))
 
-			jwtPlugin.(*JwtPlugin).FetchKeys()
+			registry.FetchKeys()
 		})
 	}
 }
@@ -1413,5 +1417,44 @@ func TestServeHTTPAudience(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSharedKeyRegistryAcrossInstances(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"keys":[]}`))
+	}))
+	defer ts.Close()
+
+	cfg := Config{
+		Keys:             []string{ts.URL},
+		ForceRefreshKeys: true,
+	}
+	ctx := context.Background()
+	next := http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {})
+
+	// Traefik builds one plugin instance per router chain referencing the
+	// middleware, all with the same name.
+	first, err := New(ctx, next, &cfg, "test-shared-registry")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := New(ctx, next, &cfg, "test-shared-registry")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstRegistry := first.(*JwtPlugin).registry
+	secondRegistry := second.(*JwtPlugin).registry
+	if firstRegistry != secondRegistry {
+		t.Fatal("instances with the same name and key config must share a key registry")
+	}
+
+	// Building the second instance must not kill the refresh goroutine: a
+	// force refresh issued through the first instance's registry still has
+	// to complete (with the old cancel-by-name design this hung forever).
+	if !firstRegistry.forceRefreshKeys() {
+		t.Fatal("force refresh did not complete; background refresh goroutine is dead")
 	}
 }

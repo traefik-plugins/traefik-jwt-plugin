@@ -280,6 +280,16 @@ func (r *keyRegistry) BackgroundRefresh() {
 	}
 }
 
+// refreshTimeoutChan returns a channel that fires after the configured
+// refresh timeout, or nil — which never fires in a select — when no timeout
+// is configured, preserving the historical wait-forever behavior.
+func (r *keyRegistry) refreshTimeoutChan() <-chan time.Time {
+	if r.refreshTimeout <= 0 {
+		return nil
+	}
+	return time.After(r.refreshTimeout)
+}
+
 func (r *keyRegistry) forceRefreshKeys() (refreshed bool) {
 	if len(r.jwkEndpoints) == 0 {
 		return
@@ -289,14 +299,14 @@ func (r *keyRegistry) forceRefreshKeys() (refreshed bool) {
 	refreshedCh := make(chan struct{}, 1)
 	select {
 	case r.forceRefreshCmd <- refreshedCh:
-	case <-time.After(forceRefreshTimeout):
+	case <-r.refreshTimeoutChan():
 		logWarn("forceRefreshKeys - timed out waiting for background refresh worker").print()
 		return
 	}
 	select {
 	case <-refreshedCh:
 		refreshed = true
-	case <-time.After(forceRefreshTimeout):
+	case <-r.refreshTimeoutChan():
 		logWarn("forceRefreshKeys - timed out waiting for key fetch").print()
 	}
 	return

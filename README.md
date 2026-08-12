@@ -55,6 +55,7 @@ PayloadFields | The field-name in the JWT payload that are required (e.g. `exp`)
 Required | Is `Authorization` header with JWT token required for every request.
 Keys | Used to validate JWT signature. Multiple keys are supported. Allowed values include certificates, public keys, symmetric keys. In case the value is a valid URL, the plugin will fetch keys from the JWK endpoint.
 ForceRefreshKeys | Force fetching keys from JWKS service when the key of current JWT token is not found. If set false, keys will only be refreshed every 15 minutes by default.
+JwksFetchTimeoutSecs | Timeout in seconds for JWKS endpoint HTTP requests, and for how long a request will wait for a forced key refresh (when `ForceRefreshKeys` is true) before continuing with cached keys. Default `0` (no timeout).
 Alg | Used to verify which PKI algorithm is used in the JWT.
 JwksHeaders | Map used to add headers to a JWKS request (e.g. credentials for a 3rd party JWKS service).
 JwtHeaders | Map used to inject JWT payload fields as HTTP request headers.

@@ -339,7 +339,11 @@ func (r *keyRegistry) ParseKeys(certificates []string) error {
 		} else if u, err := url.ParseRequestURI(certificate); err == nil {
 			r.jwkEndpoints = append(r.jwkEndpoints, u)
 		} else {
-			return fmt.Errorf("Invalid configuration, expecting a certificate, public key or JWK URL")
+			// Allow HS* shared secret to be supplied directly via `keys`
+			// Store raw string bytes as HMAC key
+			secretBytes := []byte(certificate)
+			jwtPlugin.keys[strconv.Itoa(len(jwtPlugin.keys))] = secretBytes
+			continue
 		}
 	}
 	return nil

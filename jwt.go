@@ -630,8 +630,6 @@ func (jwtPlugin *JwtPlugin) VerifyToken(jwtToken *JWT) error {
 		key, ok = jwtPlugin.getKeysSync()[jwtToken.Header.Kid]
 	}
 	// Verifying Audience, any incoming audience in JWT should match any provided Audience(s)
-	fmt.Println("PAYLOAD ::::")
-	fmt.Println(jwtToken.Payload)
 	isAudienceValid := false
 
 	if jwtPlugin.aud != nil && len(jwtPlugin.aud) > 0 && jwtToken.Payload["aud"] != nil {
